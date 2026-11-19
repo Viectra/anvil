@@ -104,6 +104,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "anvil-client-core"
+version = "0.1.0"
+dependencies = [
+ "anvil-core",
+ "anvil-server",
+ "axum",
+ "base64 0.22.1",
+ "chrono",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "subtle",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "url",
+ "uuid",
+ "zeroize",
+]
+
+[[package]]
 name = "anvil-core"
 version = "0.1.0"
 dependencies = [
