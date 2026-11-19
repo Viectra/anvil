@@ -9,26 +9,37 @@ description = "Zero-knowledge cryptography, vault models, TOTP, search, and impo
 [lints]
 workspace = true
 
+[features]
+default = ["media"]
+media = ["dep:image"]
+
 [dependencies]
 aes.workspace = true
 argon2.workspace = true
 base64.workspace = true
 cbc.workspace = true
 chacha20poly1305.workspace = true
+chrono.workspace = true
+data-encoding.workspace = true
 getrandom.workspace = true
 hkdf.workspace = true
 hmac.workspace = true
+image = { workspace = true, optional = true }
 pbkdf2.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha1.workspace = true
 sha2.workspace = true
 subtle.workspace = true
 thiserror.workspace = true
 unicode-normalization.workspace = true
+url.workspace = true
 uuid.workspace = true
 zeroize.workspace = true
+zxcvbn.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+chrono = { version = "0.4", default-features = false, features = ["serde", "now", "wasmbind"] }
 getrandom = { version = "0.2", features = ["js"] }
 uuid = { version = "1.11", features = ["v4", "js", "serde"] }
 
