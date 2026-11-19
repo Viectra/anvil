@@ -1,0 +1,95 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+
+  --bg-void: #0B0C0F;
+  --bg-surface: #12141A;
+  --bg-elevated: #191C24;
+  --bg-hover: #20242F;
+  --bg-active: #272C3A;
+
+  --border-subtle: #222632;
+  --border-default: #2E3444;
+  --border-focus: #E07A2F;
+
+  --text-primary: #F1F3F7;
+  --text-secondary: #9BA3B5;
+  --text-muted: #636B7E;
+
+  --accent-forge: #E07A2F;
+  --accent-forge-hover: #F28C3E;
+  --accent-forge-muted: rgba(224, 122, 47, 0.14);
+  --accent-steel: #5B8DEF;
+  --accent-steel-muted: rgba(91, 141, 239, 0.14);
+
+  --status-secure: #2FB379;
+  --status-warning: #E5A93C;
+  --status-danger: #E04F5F;
+
+  --pw-alpha: #F1F3F7;
+  --pw-digit: #5B8DEF;
+  --pw-symbol: #E07A2F;
+
+  --font-sans: 'Inter', 'Segoe UI Variable', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+.anvil-selectable {
+  user-select: text;
+}
+
+.anvil-mono-secret {
+  font-family: var(--font-mono);
+  font-feature-settings: "zero" 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.anvil-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.anvil-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.anvil-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 3px;
+}
+
+.anvil-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+.anvil-kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  background: var(--bg-void);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+}
