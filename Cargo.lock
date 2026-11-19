@@ -57,13 +57,19 @@ dependencies = [
  "cbc",
  "chacha20poly1305",
  "chrono",
+ "csv",
  "data-encoding",
+ "flate2",
  "getrandom 0.2.17",
  "hkdf",
  "hmac",
  "image",
+ "nucleo-matcher",
  "pbkdf2",
  "proptest",
+ "psl",
+ "quick-xml",
+ "regex",
  "serde",
  "serde_json",
  "sha1",
@@ -74,7 +80,17 @@ dependencies = [
  "url",
  "uuid",
  "zeroize",
+ "zip",
  "zxcvbn",
+]
+
+[[package]]
+name = "arbitrary"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3bc62ac97cc33321f50863d514c3bc38a453947a8f9e781137e47c7401020aed"
+dependencies = [
+ "derive_arbitrary",
 ]
 
 [[package]]
@@ -354,6 +370,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossbeam-utils"
+version = "0.8.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a31eee39dddec8330830986fcd7625edb5a24ec90ea038215273bbc3adb08ac6"
+
+[[package]]
 name = "crypto-common"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -362,6 +384,27 @@ dependencies = [
  "generic-array",
  "rand_core 0.6.4",
  "typenum",
+]
+
+[[package]]
+name = "csv"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52cd9d68cf7efc6ddfaaee42e7288d3a99d613d4b50f76ce9827ae0c6e14f938"
+dependencies = [
+ "csv-core",
+ "itoa",
+ "ryu",
+ "serde_core",
+]
+
+[[package]]
+name = "csv-core"
+version = "0.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "704a3c26996a80471189265814dbc2c257598b96b8a7feae2d31ace646bb9782"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]
@@ -410,6 +453,17 @@ name = "deranged"
 version = "0.5.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e9de72ce2ad1f90dc62fa25f0f430ef85eb4b0d8fa0be4f30373bc40a21d28e"
+
+[[package]]
+name = "derive_arbitrary"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b034bd7d5f032402a2479444dcc6f74e36a03f31854d41680fb240ef682a1ac"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.10",
+]
 
 [[package]]
 name = "derive_builder"
@@ -900,6 +954,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "nucleo-matcher"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf33f538733d1a5a3494b836ba913207f14d9d4a1d3cd67030c5061bdd2cac85"
+dependencies = [
+ "memchr",
+ "unicode-segmentation",
+]
+
+[[package]]
 name = "num-conv"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1039,6 +1103,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "psl"
+version = "2.1.258"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3dd856c90936a531c75647b54c4222b4745ceedf60d0a0f14853bb9458d69af9"
+dependencies = [
+ "psl-types",
+]
+
+[[package]]
+name = "psl-types"
+version = "2.0.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33cb294fe86a74cbcf50d4445b37da762029549ebeea341421c7c70370f86cac"
+
+[[package]]
 name = "pxfm"
 version = "0.1.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1055,6 +1134,15 @@ name = "quick-error"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a993555f31e5a609f617c12db6250dedcac1b0a85076912c436e6fc9b2c8e6a3"
+
+[[package]]
+name = "quick-xml"
+version = "0.37.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "331e97a1af0bf59823e6eadffe373d7b27f485be8748f71471c662c1f269b7fb"
+dependencies = [
+ "memchr",
+]
 
 [[package]]
 name = "quote"
@@ -1164,6 +1252,12 @@ dependencies = [
  "tempfile",
  "wait-timeout",
 ]
+
+[[package]]
+name = "ryu"
+version = "1.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
 name = "serde"
@@ -1429,6 +1523,12 @@ checksum = "75cd3fb03d5288b3ba9a1ee103ac7e9cbb59f0b03d64f8ddfcc04dd42758a85d"
 dependencies = [
  "tinyvec",
 ]
+
+[[package]]
+name = "unicode-segmentation"
+version = "1.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6f5d3c3b1bf09027a88a6bc961fc00497d651009560b5463668dc81b0fa87a8"
 
 [[package]]
 name = "universal-hash"
@@ -1735,6 +1835,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "zip"
+version = "2.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1dcb24d0152526ae49b9b96c1dcf71850ca1e0b882e4e28ed898a93c41334744"
+dependencies = [
+ "arbitrary",
+ "crc32fast",
+ "crossbeam-utils",
+ "flate2",
+ "indexmap",
+ "memchr",
+ "zopfli",
+]
+
+[[package]]
 name = "zlib-rs"
 version = "0.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1745,6 +1860,18 @@ name = "zmij"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
+
+[[package]]
+name = "zopfli"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aaf7fc5d30c28483d93805c4a5e12b05bbb52407fa67c5f8bd552374cd01fb11"
+dependencies = [
+ "bumpalo",
+ "crc32fast",
+ "log",
+ "simd-adler32",
+]
 
 [[package]]
 name = "zune-core"

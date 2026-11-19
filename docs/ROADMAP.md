@@ -1,6 +1,6 @@
 # Feuille de Route & Plan d'Exécution Incrémental — **Anvil**
 
-> **Statut actuel** : **Phase 1 — En cours (`anvil-core` & Import/Export)**  
+> **Statut actuel** : **Phase 1 terminée (`anvil-core` & Import/Export) — Phase 2 à démarrer**  
 > **Référence technique** : [`ARCHITECTURE.md`](./ARCHITECTURE.md)
 
 ---
@@ -31,8 +31,8 @@ cargo test --workspace
 ```mermaid
 flowchart LR
     P0["Phase 0: Architecture et specifications (Terminee)"]
-    P1["Phase 1: Cargo Workspace, anvil-core et Import/Export (En cours)"]
-    P2["Phase 2: anvil-server, Multi-Utilisateurs et Docker"]
+    P1["Phase 1: Cargo Workspace, anvil-core et Import/Export (Terminee)"]
+    P2["Phase 2: anvil-server, Multi-Utilisateurs et Docker (Prochaine)"]
     P3["Phase 3: anvil-client-core, anvil-ui et Anvil Desktop"]
     P4["Phase 4: anvil-wasm et Extension MV3 Anvil Browser"]
     P5["Phase 5: Anvil Mobile (Android/iOS) et Autofill OS"]

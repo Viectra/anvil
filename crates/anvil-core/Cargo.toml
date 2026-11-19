@@ -20,12 +20,18 @@ base64.workspace = true
 cbc.workspace = true
 chacha20poly1305.workspace = true
 chrono.workspace = true
+csv.workspace = true
 data-encoding.workspace = true
+flate2.workspace = true
 getrandom.workspace = true
 hkdf.workspace = true
 hmac.workspace = true
 image = { workspace = true, optional = true }
+nucleo-matcher.workspace = true
 pbkdf2.workspace = true
+psl.workspace = true
+quick-xml.workspace = true
+regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha1.workspace = true
@@ -36,6 +42,7 @@ unicode-normalization.workspace = true
 url.workspace = true
 uuid.workspace = true
 zeroize.workspace = true
+zip.workspace = true
 zxcvbn.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
