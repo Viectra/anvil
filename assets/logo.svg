@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none" role="img" aria-label="Anvil Logo">
+  <defs>
+    <linearGradient id="anvil-shield-bg" x1="12" y1="6" x2="52" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#191C24"/>
+      <stop offset="100%" stop-color="#0E1015"/>
+    </linearGradient>
+    <linearGradient id="anvil-forge-ember" x1="13.5" y1="22.5" x2="48" y2="26" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#B91C2E"/>
+      <stop offset="55%" stop-color="#E63946"/>
+      <stop offset="100%" stop-color="#F26A3D"/>
+    </linearGradient>
+    <linearGradient id="anvil-steel-body" x1="20" y1="25" x2="44" y2="46" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F1F3F7"/>
+      <stop offset="100%" stop-color="#B5BECB"/>
+    </linearGradient>
+  </defs>
+  <path d="M22 6H42L54 16V35L32 58L10 35V16L22 6Z" fill="url(#anvil-shield-bg)" stroke="#2E3444" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M23 9.5H41L50.5 17.5V33.8L32 53.5L13.5 33.8V17.5L23 9.5Z" stroke="#222632" stroke-width="1"/>
+  <path d="M22 6H42" stroke="#D63242" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M23.5 9.5H40.5" stroke="#E63946" stroke-opacity="0.55" stroke-width="1.2" stroke-linecap="round"/>
+  <path d="M32 12.5L35.6 16.8L32 20L28.4 16.8L32 12.5Z" fill="#E63946"/>
+  <path d="M32 14.4L33.7 16.7L32 18.4L30.3 16.7L32 14.4Z" fill="#FF7A59"/>
+  <path d="M14 25.5H47.5V27.6H41.5L37.5 31V38.2L43.5 43V46H20.5V43L26.5 38.2V31L21.5 27.8L14 25.5Z" fill="url(#anvil-steel-body)"/>
+  <path d="M20.5 44.8H43.5V46.2H20.5Z" fill="#D63242" fill-opacity="0.85"/>
+  <path d="M13.5 22.5H48V26H14.5L13.5 22.5Z" fill="url(#anvil-forge-ember)"/>
+</svg>
