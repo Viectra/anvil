@@ -1,0 +1,94 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-anvil}
+      POSTGRES_USER: ${POSTGRES_USER:-anvil}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-anvil} -d ${POSTGRES_DB:-anvil}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - anvil-internal
+
+  anvil:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: anvil-server:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ANVIL_DATABASE_URL: postgres://${POSTGRES_USER:-anvil}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-anvil}
+      ANVIL_BIND_ADDR: 0.0.0.0:8080
+      ANVIL_ALLOW_SIGNUPS: ${ANVIL_ALLOW_SIGNUPS:-false}
+      ANVIL_JWT_PRIVATE_KEY: ${ANVIL_JWT_PRIVATE_KEY:?set ANVIL_JWT_PRIVATE_KEY via anvil-server keygen}
+      ANVIL_PRELOGIN_SECRET: ${ANVIL_PRELOGIN_SECRET:?set ANVIL_PRELOGIN_SECRET via anvil-server keygen}
+      ANVIL_AUTH_PEPPER: ${ANVIL_AUTH_PEPPER:-}
+      ANVIL_TRUSTED_PROXIES: ${ANVIL_TRUSTED_PROXIES:-127.0.0.1/32,172.16.0.0/12}
+      ANVIL_CORS_ORIGINS: ${ANVIL_CORS_ORIGINS:-}
+      ANVIL_ENABLE_FAVICON_PROXY: ${ANVIL_ENABLE_FAVICON_PROXY:-false}
+      ANVIL_PUBLIC_URL: ${ANVIL_PUBLIC_URL:-}
+      ANVIL_LOG_FORMAT: ${ANVIL_LOG_FORMAT:-json}
+    ports:
+      - "127.0.0.1:${ANVIL_PORT:-8080}:8080"
+    user: "65532:65532"
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - anvil-internal
+
+  anvil-sqlite:
+    profiles:
+      - sqlite
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: anvil-server:latest
+    restart: unless-stopped
+    environment:
+      ANVIL_DATABASE_URL: sqlite:///data/anvil.db
+      ANVIL_BIND_ADDR: 0.0.0.0:8080
+      ANVIL_ALLOW_SIGNUPS: ${ANVIL_ALLOW_SIGNUPS:-false}
+      ANVIL_JWT_PRIVATE_KEY: ${ANVIL_JWT_PRIVATE_KEY:?set ANVIL_JWT_PRIVATE_KEY via anvil-server keygen}
+      ANVIL_PRELOGIN_SECRET: ${ANVIL_PRELOGIN_SECRET:?set ANVIL_PRELOGIN_SECRET via anvil-server keygen}
+      ANVIL_AUTH_PEPPER: ${ANVIL_AUTH_PEPPER:-}
+      ANVIL_TRUSTED_PROXIES: ${ANVIL_TRUSTED_PROXIES:-127.0.0.1/32,172.16.0.0/12}
+      ANVIL_CORS_ORIGINS: ${ANVIL_CORS_ORIGINS:-}
+      ANVIL_ENABLE_FAVICON_PROXY: ${ANVIL_ENABLE_FAVICON_PROXY:-false}
+      ANVIL_PUBLIC_URL: ${ANVIL_PUBLIC_URL:-}
+      ANVIL_LOG_FORMAT: ${ANVIL_LOG_FORMAT:-json}
+    volumes:
+      - sqlite_data:/data
+    ports:
+      - "127.0.0.1:${ANVIL_PORT:-8080}:8080"
+    user: "65532:65532"
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  pgdata:
+  sqlite_data:
+
+networks:
+  anvil-internal:
+    driver: bridge

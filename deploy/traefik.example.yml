@@ -1,0 +1,30 @@
+http:
+  routers:
+    anvil:
+      rule: "Host(`vault.example.com`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - anvil-security-headers
+      service: anvil-backend
+
+  middlewares:
+    anvil-security-headers:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        contentTypeNosniff: true
+        frameDeny: true
+        referrerPolicy: "no-referrer"
+
+  services:
+    anvil-backend:
+      loadBalancer:
+        servers:
+          - url: "http://anvil:8080"
+        healthCheck:
+          path: "/api/v1/health"
+          interval: "30s"
+          timeout: "5s"

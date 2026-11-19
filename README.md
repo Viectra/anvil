@@ -26,9 +26,36 @@ Anvil centralizes all security-critical logic—key derivation, authenticated en
 ```text
 crates/
   anvil-core/          Pure Rust crypto, vault models, TOTP, search, and importers/exporters
+  anvil-server/        Self-hosted Axum + SQLx API server (PostgreSQL & SQLite) and admin CLI
+deploy/
+  Dockerfile           Multi-stage non-root container build
+  docker-compose.yml   Hardened PostgreSQL 16 and SQLite compose stacks
 docs/
   ARCHITECTURE.md      System, cryptographic, SQL, and REST API specification
   ROADMAP.md           Incremental 6-phase delivery plan
+```
+
+## Self-Hosted Server
+
+Generate cryptographic instance keys and configure `deploy/.env`:
+
+```bash
+cp deploy/.env.example deploy/.env
+cargo run -p anvil-server -- keygen
+```
+
+Manage database migrations, invitations, and accounts through the built-in CLI:
+
+```bash
+cargo run -p anvil-server -- migrate
+cargo run -p anvil-server -- invite create --email alice@example.com --max-uses 1
+cargo run -p anvil-server -- user promote alice@example.com
+```
+
+Run the containerized PostgreSQL stack (or `--profile sqlite` for single-file storage):
+
+```bash
+docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
 ## Development
