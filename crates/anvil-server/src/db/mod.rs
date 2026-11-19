@@ -360,7 +360,7 @@ pub struct RegisterUserInput {
 
 #[derive(Debug, Clone)]
 pub enum RegisterOutcome {
-    Created(UserRecord),
+    Created(Box<UserRecord>),
     EmailExists,
     UserIdConflict,
     InvalidInvitation,
@@ -383,8 +383,8 @@ pub struct CreateSessionInput {
 #[derive(Debug, Clone)]
 pub enum RotateRefreshOutcome {
     Rotated {
-        session: SessionRecord,
-        user: UserRecord,
+        session: Box<SessionRecord>,
+        user: Box<UserRecord>,
     },
     InvalidOrExpired,
     ReuseDetected {

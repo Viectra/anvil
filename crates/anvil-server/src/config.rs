@@ -250,7 +250,8 @@ fn decode_hex(hex: &str) -> Result<Vec<u8>, String> {
     }
     let bytes = trimmed.as_bytes();
     let mut out = Vec::with_capacity(bytes.len() / 2);
-    for pair in bytes.chunks_exact(2) {
+    let (pairs, _) = bytes.as_chunks::<2>();
+    for pair in pairs {
         let s = std::str::from_utf8(pair).map_err(|_| "invalid UTF-8 in hex secret".to_owned())?;
         let val = u8::from_str_radix(s, 16).map_err(|_| format!("invalid hex byte `{s}`"))?;
         out.push(val);

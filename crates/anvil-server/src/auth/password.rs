@@ -86,7 +86,7 @@ pub fn compute_fake_prelogin_salt(
 pub fn generate_opaque_token() -> Result<(Zeroizing<String>, [u8; 32]), anyhow::Error> {
     let mut raw = Zeroizing::new([0u8; OPAQUE_TOKEN_BYTES]);
     fill_random_bytes(&mut *raw).map_err(|e| anyhow::anyhow!("csprng error: {e}"))?;
-    let token = Zeroizing::new(URL_SAFE_NO_PAD.encode(&*raw));
+    let token = Zeroizing::new(URL_SAFE_NO_PAD.encode(*raw));
     let hash = hash_opaque_token(&token);
     Ok((token, hash))
 }
@@ -159,7 +159,7 @@ impl ServerAuthHasher {
         fill_random_bytes(&mut salt).map_err(|e| anyhow::anyhow!("csprng error: {e}"))?;
         let ikm = self.apply_pepper(master_auth_hash)?;
         let digest = derive_argon2id_digest(
-            &*ikm,
+            &ikm,
             &salt,
             self.memory_kib,
             self.iterations,
@@ -170,7 +170,7 @@ impl ServerAuthHasher {
             self.memory_kib,
             self.iterations,
             self.parallelism,
-            URL_SAFE_NO_PAD.encode(&*digest)
+            URL_SAFE_NO_PAD.encode(*digest)
         );
         Ok((salt.to_vec(), encoded))
     }
@@ -185,7 +185,13 @@ impl ServerAuthHasher {
         if salt.len() != SERVER_AUTH_SALT_LEN {
             return Ok(false);
         }
-        let Some((m, t, p, expected_digest)) = decode_stored_hash(stored_hash)? else {
+        let Some(DecodedArgonHash {
+            m,
+            t,
+            p,
+            digest: expected_digest,
+        }) = decode_stored_hash(stored_hash)?
+        else {
             return Ok(false);
         };
         if m > MAX_VERIFY_MEMORY_KIB || t > MAX_VERIFY_ITERATIONS || p > MAX_VERIFY_PARALLELISM {
@@ -194,7 +200,7 @@ impl ServerAuthHasher {
             ));
         }
         let ikm = self.apply_pepper(master_auth_hash)?;
-        let computed = derive_argon2id_digest(&*ikm, salt, m, t, p)?;
+        let computed = derive_argon2id_digest(&ikm, salt, m, t, p)?;
         Ok(bool::from(
             computed.as_slice().ct_eq(expected_digest.as_slice()),
         ))
@@ -206,7 +212,7 @@ impl ServerAuthHasher {
         const DUMMY_SALT: [u8; SERVER_AUTH_SALT_LEN] = [0x5Au8; SERVER_AUTH_SALT_LEN];
         let _ = self.apply_pepper(&DUMMY_INPUT).and_then(|ikm| {
             derive_argon2id_digest(
-                &*ikm,
+                &ikm,
                 &DUMMY_SALT,
                 self.memory_kib,
                 self.iterations,
@@ -233,9 +239,14 @@ fn derive_argon2id_digest(
     Ok(out)
 }
 
-fn decode_stored_hash(
-    encoded: &str,
-) -> Result<Option<(u32, u32, u32, Zeroizing<[u8; 32]>)>, anyhow::Error> {
+struct DecodedArgonHash {
+    m: u32,
+    t: u32,
+    p: u32,
+    digest: Zeroizing<[u8; 32]>,
+}
+
+fn decode_stored_hash(encoded: &str) -> Result<Option<DecodedArgonHash>, anyhow::Error> {
     let mut parts = encoded.split(':');
     let Some(ver) = parts.next() else {
         return Ok(None);
@@ -277,7 +288,7 @@ fn decode_stored_hash(
     }
     let mut digest = Zeroizing::new([0u8; 32]);
     digest.copy_from_slice(&digest_vec);
-    Ok(Some((m, t, p, digest)))
+    Ok(Some(DecodedArgonHash { m, t, p, digest }))
 }
 
 #[cfg(test)]

@@ -345,7 +345,7 @@ pub async fn register_user_with_session(
     .await?;
 
     tx.commit().await?;
-    Ok(RegisterOutcome::Created(user))
+    Ok(RegisterOutcome::Created(Box::new(user)))
 }
 
 pub async fn create_session(
@@ -512,7 +512,10 @@ pub async fn rotate_refresh_token(
                 session.last_ip = Some(ip.to_owned());
             }
             tx.commit().await?;
-            return Ok(RotateRefreshOutcome::Rotated { session, user });
+            return Ok(RotateRefreshOutcome::Rotated {
+                session: Box::new(session),
+                user: Box::new(user),
+            });
         }
 
         revoke_family_tx(

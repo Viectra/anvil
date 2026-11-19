@@ -56,7 +56,7 @@ impl JwtManager {
                 .map_err(|e| anyhow::anyhow!("invalid Ed25519 PKCS#8 DER private key: {e}"))?
         };
 
-        Ok(Self::from_signing_key(&signing_key)?)
+        Self::from_signing_key(&signing_key)
     }
 
     fn from_signing_key(signing_key: &SigningKey) -> Result<Self, anyhow::Error> {

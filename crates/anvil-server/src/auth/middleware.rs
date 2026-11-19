@@ -29,6 +29,23 @@ pub struct AuthUser {
 #[derive(Debug, Clone)]
 pub struct AdminUser(pub AuthUser);
 
+/// Infallible extractor resolving the originating client IP behind `ANVIL_TRUSTED_PROXIES`.
+#[derive(Debug, Clone, Copy)]
+pub struct ClientIp(pub Option<IpAddr>);
+
+impl FromRequestParts<AppState> for ClientIp {
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let peer_ip = extract_peer_ip_from_parts(parts);
+        let resolved = resolve_client_ip(peer_ip, &parts.headers, &state.config.trusted_proxies);
+        Ok(Self(resolved))
+    }
+}
+
 impl FromRequestParts<AppState> for AuthUser {
     type Rejection = ApiError;
 

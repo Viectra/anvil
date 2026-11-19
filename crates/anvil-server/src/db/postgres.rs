@@ -292,7 +292,7 @@ pub async fn register_user_with_session(
     .await?;
 
     tx.commit().await?;
-    Ok(RegisterOutcome::Created(user))
+    Ok(RegisterOutcome::Created(Box::new(user)))
 }
 
 pub async fn create_session(
@@ -443,8 +443,8 @@ pub async fn rotate_refresh_token(
             let updated_session = decode_session(&updated)?;
             tx.commit().await?;
             return Ok(RotateRefreshOutcome::Rotated {
-                session: updated_session,
-                user,
+                session: Box::new(updated_session),
+                user: Box::new(user),
             });
         }
 
