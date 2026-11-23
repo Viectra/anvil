@@ -280,7 +280,7 @@ async function handleRequest(
       const mod = await getWasmModule();
       const api = makeApiClient(serverUrl);
       const defaultKdf = {
-        algorithm: "Argon2id",
+        algorithm: "argon2id",
         memory_kib: 65536,
         iterations: 3,
         parallelism: 1,

@@ -1,0 +1,30 @@
+[package]
+name = "anvil-fuzz"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+anvil-core = { path = "../crates/anvil-core" }
+libfuzzer-sys = "0.4"
+uuid = "1.11"
+
+[[bin]]
+name = "fuzz_aead_envelope"
+path = "fuzz_targets/fuzz_aead_envelope.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_totp_uri"
+path = "fuzz_targets/fuzz_totp_uri.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_importers"
+path = "fuzz_targets/fuzz_importers.rs"
+doc = false
