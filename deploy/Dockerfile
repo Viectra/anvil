@@ -6,9 +6,17 @@ FROM chef AS planner
 COPY Cargo.toml Cargo.lock ./
 COPY crates/anvil-core/Cargo.toml crates/anvil-core/Cargo.toml
 COPY crates/anvil-server/Cargo.toml crates/anvil-server/Cargo.toml
+COPY crates/anvil-client-core/Cargo.toml crates/anvil-client-core/Cargo.toml
+COPY crates/anvil-wasm/Cargo.toml crates/anvil-wasm/Cargo.toml
+COPY apps/desktop/src-tauri/Cargo.toml apps/desktop/src-tauri/Cargo.toml
+COPY apps/mobile/src-tauri/Cargo.toml apps/mobile/src-tauri/Cargo.toml
 COPY crates/anvil-core/src crates/anvil-core/src
 COPY crates/anvil-server/src crates/anvil-server/src
 COPY crates/anvil-server/migrations crates/anvil-server/migrations
+COPY crates/anvil-client-core/src crates/anvil-client-core/src
+COPY crates/anvil-wasm/src crates/anvil-wasm/src
+COPY apps/desktop/src-tauri/src apps/desktop/src-tauri/src
+COPY apps/mobile/src-tauri/src apps/mobile/src-tauri/src
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
@@ -18,9 +26,23 @@ RUN cargo chef cook --release --recipe-path recipe.json -p anvil-server
 COPY Cargo.toml Cargo.lock ./
 COPY crates/anvil-core crates/anvil-core
 COPY crates/anvil-server crates/anvil-server
+COPY crates/anvil-client-core/Cargo.toml crates/anvil-client-core/Cargo.toml
+COPY crates/anvil-client-core/src crates/anvil-client-core/src
+COPY crates/anvil-wasm/Cargo.toml crates/anvil-wasm/Cargo.toml
+COPY crates/anvil-wasm/src crates/anvil-wasm/src
+COPY apps/desktop/src-tauri/Cargo.toml apps/desktop/src-tauri/Cargo.toml
+COPY apps/desktop/src-tauri/src apps/desktop/src-tauri/src
+COPY apps/mobile/src-tauri/Cargo.toml apps/mobile/src-tauri/Cargo.toml
+COPY apps/mobile/src-tauri/src apps/mobile/src-tauri/src
 RUN cargo build --release --locked --bin anvil-server && mkdir -p /data && chmod 700 /data
 
 FROM gcr.io/distroless/cc-debian12:nonroot
+LABEL org.opencontainers.image.title="Anvil Server" \
+      org.opencontainers.image.description="Self-hosted zero-knowledge password manager and TOTP server" \
+      org.opencontainers.image.source="https://github.com/Viectra/anvil" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.version="1.0.0"
+
 WORKDIR /app
 COPY --from=builder /app/target/release/anvil-server /usr/local/bin/anvil-server
 COPY --from=builder --chown=65532:65532 /data /data

@@ -1,0 +1,176 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust (fmt, clippy, unit & PostgreSQL integration)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: anvil
+          POSTGRES_PASSWORD: anvil
+          POSTGRES_DB: anvil_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run Clippy with strict lints
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Run workspace test suite
+        run: cargo test --workspace --locked
+      - name: Run PostgreSQL integration suite
+        env:
+          ANVIL_TEST_POSTGRES_URL: postgres://anvil:anvil@127.0.0.1:5432/anvil_test
+        run: cargo test -p anvil-server --test api_integration optional_postgres_integration_suite -- --nocapture
+
+  wasm:
+    name: WebAssembly (anvil-core & anvil-wasm)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Check anvil-core no_std/wasm compatibility
+        run: cargo check -p anvil-core --target wasm32-unknown-unknown --no-default-features --locked
+      - name: Clippy anvil-wasm on wasm32
+        run: cargo clippy -p anvil-wasm --target wasm32-unknown-unknown -- -D warnings
+      - name: Build anvil-wasm release binary
+        run: cargo build -p anvil-wasm --target wasm32-unknown-unknown --release --locked
+
+  frontend:
+    name: Svelte UI, Desktop, Extension & Mobile Web Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install workspace dependencies
+        run: pnpm install
+      - name: Run Svelte & TypeScript checks
+        run: pnpm check
+      - name: Build frontend bundles
+        run: |
+          pnpm --filter @anvil/desktop build
+          pnpm --filter @anvil/extension build:chromium
+          pnpm --filter @anvil/extension build:firefox
+          pnpm --filter @anvil/mobile build
+
+  security-audit:
+    name: Security Audit, License Check & CycloneDX SBOM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run cargo-audit
+        uses: rustsec/audit-check@v2
+      - name: Run cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          arguments: check
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: anvil-sbom.cdx.json
+          upload-artifact: true
+          artifact-name: anvil-sbom-cyclonedx
+
+  fuzz-smoke:
+    name: Bounded cargo-fuzz Smoke Run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+      - name: Run fuzzers (15s each)
+        working-directory: fuzz
+        run: |
+          cargo fuzz run fuzz_aead_envelope -- -max_total_time=15
+          cargo fuzz run fuzz_totp_uri -- -max_total_time=15
+          cargo fuzz run fuzz_importers -- -max_total_time=15
+
+  docker-build:
+    name: Docker Image Build & Compose Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Compose configuration
+        env:
+          POSTGRES_PASSWORD: ci-dummy-password
+          ANVIL_JWT_PRIVATE_KEY: ci-dummy-jwt-key
+          ANVIL_PRELOGIN_SECRET: ci-dummy-prelogin-secret
+        run: docker compose -f deploy/docker-compose.yml config --quiet
+      - uses: docker/setup-buildx-action@v3
+      - name: Build anvil-server container image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: false
+          tags: anvil-server:ci
+
+  release:
+    name: Release Artifacts & Build Provenance
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [rust, wasm, frontend, security-audit, docker-build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build Linux x86_64 release binary
+        run: cargo build --release --locked --bin anvil-server
+      - name: Package release archive and SHA256SUMS
+        run: |
+          mkdir -p dist
+          tar -C target/release -czf dist/anvil-server-linux-x86_64.tar.gz anvil-server
+          (cd dist && sha256sum anvil-server-linux-x86_64.tar.gz > SHA256SUMS.txt)
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/anvil-server-linux-x86_64.tar.gz
+            dist/SHA256SUMS.txt
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/anvil-server-linux-x86_64.tar.gz
+            dist/SHA256SUMS.txt

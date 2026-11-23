@@ -1,7 +1,7 @@
 # Feuille de Route & Plan d'Exécution Incrémental — **Anvil**
 
-> **Statut actuel** : **Phase 5 terminée (`Anvil Mobile` Android/iOS & Autofill OS) — Phase 6 à démarrer**  
-> **Référence technique** : [`ARCHITECTURE.md`](./ARCHITECTURE.md)
+> **Statut actuel** : **Phase 6 terminée (Audit, Durcissement Sécurité, Fuzzing & Release v1.0) — v1.0.0 prête**  
+> **Référence technique** : [`ARCHITECTURE.md`](./ARCHITECTURE.md) · [`SECURITY.md`](./SECURITY.md) · [`SELF_HOSTING.md`](./SELF_HOSTING.md)
 
 ---
 
@@ -36,7 +36,7 @@ flowchart LR
     P3["Phase 3: anvil-client-core, anvil-ui et Anvil Desktop (Terminee)"]
     P4["Phase 4: anvil-wasm et Extension MV3 Anvil Browser (Terminee)"]
     P5["Phase 5: Anvil Mobile (Android/iOS) et Autofill OS (Terminee)"]
-    P6["Phase 6: Audit Securite, Fuzzing et Release v1.0 (Prochaine)"]
+    P6["Phase 6: Audit Securite, Fuzzing et Release v1.0 (Terminee)"]
 
     P0 --> P1 --> P2 --> P3 --> P4 --> P5 --> P6
 ```
@@ -197,7 +197,7 @@ Porter Anvil sur Android et iOS via Tauri v2 en réutilisant `anvil-client-core`
 
 ---
 
-## Phase 6 — Audit, Durcissement Sécurité & Release v1.0
+## Phase 6 — Audit, Durcissement Sécurité & Release v1.0 *(Statut : Terminée)*
 
 ### Objectifs
 Soumettre l'ensemble de la chaîne cryptographique, réseau et client à un audit systématique, automatiser les tests de robustesse (fuzzing) et publier une v1.0 prête pour la production auto-hébergée.

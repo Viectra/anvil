@@ -36,11 +36,18 @@ crates/
 packages/
   anvil-ui/            Shared Svelte 5 + Tailwind v4 « Forge Moderne / Acier Sombre » UI library
 deploy/
-  Dockerfile           Multi-stage non-root container build
-  docker-compose.yml   Hardened PostgreSQL 16 and SQLite compose stacks
+  Dockerfile                   Multi-stage non-root container build
+  docker-compose.yml           Hardened PostgreSQL 16 and SQLite compose stacks
+  anvil-server.service.example Hardened systemd unit for bare-metal Linux hosts
 docs/
-  ARCHITECTURE.md      System, cryptographic, SQL, and REST API specification
-  ROADMAP.md           Incremental 6-phase delivery plan
+  ARCHITECTURE.md              System, cryptographic, SQL, and REST API specification
+  ROADMAP.md                   Incremental 6-phase delivery plan
+  SECURITY.md                  Zero-knowledge threat model, key rotation, and hardening
+  SELF_HOSTING.md              Operator deployment, reverse proxy, CLI, and backup guide
+fuzz/
+  fuzz_targets/                Standalone libFuzzer targets (AEAD, TOTP URI, importers)
+.github/workflows/ci.yml       Rust, WASM, Svelte, cargo-audit, cargo-deny, fuzz, and Docker CI
+deny.toml                      Supply-chain license, advisory, and TLS policy (`rustls` only)
 ```
 
 ## Self-Hosted Server
@@ -83,7 +90,11 @@ pnpm --filter @anvil/mobile check
 ## Documentation
 
 - [Architecture & Cryptographic Design](docs/ARCHITECTURE.md)
+- [Security & Threat Model](docs/SECURITY.md)
+- [Self-Hosting & Operations Guide](docs/SELF_HOSTING.md)
 - [Development Roadmap](docs/ROADMAP.md)
+
+Release: **v1.0.0**
 
 ## License
 

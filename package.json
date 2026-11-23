@@ -1,11 +1,11 @@
 {
   "name": "anvil-workspace",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "license": "MIT",
   "packageManager": "pnpm@9.15.0",
   "scripts": {
-    "check": "pnpm --filter @anvil/ui check && pnpm --filter @anvil/desktop check",
+    "check": "pnpm --filter @anvil/ui check && pnpm --filter @anvil/desktop check && pnpm --filter @anvil/extension check && pnpm --filter @anvil/mobile check",
     "dev:desktop": "pnpm --filter @anvil/desktop dev",
     "build:desktop": "pnpm --filter @anvil/desktop build"
   }

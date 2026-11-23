@@ -1,0 +1,39 @@
+[Unit]
+Description=Anvil Zero-Knowledge Vault Server
+Documentation=https://github.com/Viectra/anvil
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=anvil
+Group=anvil
+WorkingDirectory=/var/lib/anvil
+EnvironmentFile=/etc/anvil/anvil.env
+ExecStart=/usr/local/bin/anvil-server serve
+Restart=on-failure
+RestartSec=5s
+
+# Prevent memory dumps containing session or signing material.
+LimitCORE=0
+UMask=0077
+
+# Filesystem & privilege confinement
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/anvil
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

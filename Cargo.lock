@@ -105,7 +105,7 @@ dependencies = [
 
 [[package]]
 name = "anvil-client-core"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anvil-core",
  "anvil-server",
@@ -129,7 +129,7 @@ dependencies = [
 
 [[package]]
 name = "anvil-core"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "aes",
  "argon2",
@@ -166,7 +166,7 @@ dependencies = [
 
 [[package]]
 name = "anvil-desktop"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anvil-client-core",
  "anvil-core",
@@ -187,7 +187,7 @@ dependencies = [
 
 [[package]]
 name = "anvil-mobile"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anvil-client-core",
  "anvil-core",
@@ -208,7 +208,7 @@ dependencies = [
 
 [[package]]
 name = "anvil-server"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anvil-core",
  "anyhow",
@@ -245,7 +245,7 @@ dependencies = [
 
 [[package]]
 name = "anvil-wasm"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anvil-core",
  "base64 0.22.1",
