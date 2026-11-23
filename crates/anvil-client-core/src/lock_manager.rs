@@ -191,6 +191,24 @@ impl VaultLockManager {
         Ok(())
     }
 
+    /// Atomically swaps in a freshly rotated `VaultKey` and `VaultSubKeys` in volatile RAM.
+    pub fn replace_vault_keys(
+        &self,
+        key_version: u32,
+        vault_key: VaultKey,
+        subkeys: VaultSubKeys,
+    ) -> Result<(), ClientError> {
+        let mut guard = self.session.write().map_err(|_| ClientError::VaultLocked)?;
+        let Some(sess) = guard.as_mut() else {
+            return Err(ClientError::VaultLocked);
+        };
+        sess.key_version = key_version;
+        sess.vault_key = vault_key;
+        sess.subkeys = subkeys;
+        sess.last_activity = Instant::now();
+        Ok(())
+    }
+
     pub fn list_folders(&self) -> Result<Vec<VaultFolder>, ClientError> {
         let mut guard = self.session.write().map_err(|_| ClientError::VaultLocked)?;
         let Some(sess) = guard.as_mut() else {

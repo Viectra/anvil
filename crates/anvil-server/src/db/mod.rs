@@ -421,6 +421,47 @@ pub enum RotatePasswordOutcome {
     NotFound,
 }
 
+/// Re-encrypted blob payload submitted during atomic emergency `VaultKey` rotation.
+#[derive(Debug, Clone)]
+pub struct BlobReencryptUpsert {
+    pub id: Uuid,
+    pub item_id: Uuid,
+    pub encrypted_blob: Vec<u8>,
+    pub sha256_ciphertext: Vec<u8>,
+}
+
+/// Atomic re-keying transaction replacing wrapped `VaultKey` and all active vault ciphertexts.
+#[derive(Debug, Clone)]
+pub struct RotateVaultKeyInput {
+    pub user_id: Uuid,
+    pub current_session_id: Uuid,
+    pub base_revision: i64,
+    pub new_key_version: u32,
+    pub new_encrypted_vault_key: Vec<u8>,
+    pub folders: Vec<FolderUpsertInput>,
+    pub items: Vec<ItemUpsertInput>,
+    pub blobs: Vec<BlobReencryptUpsert>,
+    pub revoke_other_sessions: bool,
+    pub actor_ip: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub enum RotateVaultKeyOutcome {
+    Rotated {
+        key_version: u32,
+        new_revision: i64,
+        rotated_at: DateTime<Utc>,
+    },
+    VersionMismatch,
+    RevisionConflict(VaultSyncState),
+    IncompleteBatch {
+        missing_folders: usize,
+        missing_items: usize,
+        missing_blobs: usize,
+    },
+    NotFound,
+}
+
 /// Client upsert payload for an encrypted folder.
 #[derive(Debug, Clone)]
 pub struct FolderUpsertInput {
@@ -568,6 +609,11 @@ pub trait VaultRepository: Send + Sync {
         &self,
         input: RotatePasswordInput,
     ) -> Result<RotatePasswordOutcome, DbError>;
+
+    async fn rotate_vault_key(
+        &self,
+        input: RotateVaultKeyInput,
+    ) -> Result<RotateVaultKeyOutcome, DbError>;
 
     async fn delete_user_account(&self, user_id: Uuid) -> Result<bool, DbError>;
 
@@ -769,6 +815,16 @@ impl VaultRepository for DbPool {
         match self {
             Self::Postgres(pool) => postgres::rotate_master_password(pool, input).await,
             Self::Sqlite(pool) => sqlite::rotate_master_password(pool, input).await,
+        }
+    }
+
+    async fn rotate_vault_key(
+        &self,
+        input: RotateVaultKeyInput,
+    ) -> Result<RotateVaultKeyOutcome, DbError> {
+        match self {
+            Self::Postgres(pool) => postgres::rotate_vault_key(pool, input).await,
+            Self::Sqlite(pool) => sqlite::rotate_vault_key(pool, input).await,
         }
     }
 

@@ -105,6 +105,14 @@ pub fn build_router(state: AppState) -> Router {
         trusted_proxies.clone(),
         Option::<Vec<Method>>::None
     );
+    let rotate_vault_key_route = with_rate_limit!(
+        post(account::rotate_vault_key).layer(DefaultBodyLimit::max(32 * 1024 * 1024)),
+        rl,
+        300,
+        2,
+        trusted_proxies.clone(),
+        Option::<Vec<Method>>::None
+    );
     let account_me_router = with_rate_limit!(
         get(account::get_me).delete(account::delete_me),
         rl,
@@ -127,6 +135,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/auth/logout", post(auth::logout))
         .route("/api/v1/account/me", account_me_router)
         .route("/api/v1/account/rotate-password", rotate_password_route)
+        .route("/api/v1/account/rotate-vault-key", rotate_vault_key_route)
         .route("/api/v1/account/sessions", get(account::list_sessions))
         .route(
             "/api/v1/account/sessions/{session_id}",

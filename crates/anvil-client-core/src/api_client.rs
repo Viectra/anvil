@@ -220,6 +220,38 @@ pub struct RotatePasswordResponseDto {
     pub rotated_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct ReencryptRecordUpsertDto {
+    pub id: Uuid,
+    pub encrypted_data_b64: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BlobReencryptUpsertDto {
+    pub id: Uuid,
+    pub item_id: Uuid,
+    pub encrypted_blob_b64: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RotateVaultKeyRequestDto {
+    pub current_master_auth_hash_b64: String,
+    pub base_revision: i64,
+    pub new_key_version: u32,
+    pub new_encrypted_vault_key_b64: String,
+    pub folders: Vec<ReencryptRecordUpsertDto>,
+    pub items: Vec<ReencryptRecordUpsertDto>,
+    pub blobs: Vec<BlobReencryptUpsertDto>,
+    pub revoke_other_sessions: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RotateVaultKeyResponseDto {
+    pub key_version: u32,
+    pub new_revision: i64,
+    pub rotated_at: DateTime<Utc>,
+}
+
 /// Active bearer and refresh tokens kept purely in volatile RAM.
 #[derive(Clone)]
 pub struct SessionTokens {
@@ -536,6 +568,23 @@ impl AnvilApiClient {
             .send_authenticated(
                 Method::POST,
                 "/api/v1/account/rotate-password",
+                Some("application/json"),
+                Some(body),
+            )
+            .await?;
+        decode_ok_or_error(status, &bytes)
+    }
+
+    pub async fn rotate_vault_key(
+        &self,
+        req: &RotateVaultKeyRequestDto,
+    ) -> Result<RotateVaultKeyResponseDto, ClientError> {
+        let body =
+            serde_json::to_vec(req).map_err(|e| ClientError::Serialization(e.to_string()))?;
+        let (status, _, bytes) = self
+            .send_authenticated(
+                Method::POST,
+                "/api/v1/account/rotate-vault-key",
                 Some("application/json"),
                 Some(body),
             )

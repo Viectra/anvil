@@ -22,8 +22,9 @@ use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use crate::api_client::{
-    AnvilApiClient, FolderUpsertDto, ItemUpsertDto, PushSyncOutcome, RegisterRequestDto,
-    RotatePasswordRequestDto, SyncPushRequestDto, SyncResponseDto,
+    AnvilApiClient, BlobReencryptUpsertDto, FolderUpsertDto, ItemUpsertDto, PushSyncOutcome,
+    ReencryptRecordUpsertDto, RegisterRequestDto, RotatePasswordRequestDto,
+    RotateVaultKeyRequestDto, SyncPushRequestDto, SyncResponseDto,
 };
 use crate::cache::{
     CachedAccount, CachedEncryptedBlob, CachedEncryptedFolder, CachedEncryptedItem,
@@ -70,6 +71,16 @@ pub struct SyncReport {
     pub pushed_mutations: usize,
     pub auto_merged_identical: usize,
     pub pending_conflicts: usize,
+}
+
+/// Summary of an emergency `VaultKey` rotation and full ciphertext re-encryption.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EmergencyKeyRotationReport {
+    pub key_version: u32,
+    pub new_revision: i64,
+    pub reencrypted_folders: usize,
+    pub reencrypted_items: usize,
+    pub reencrypted_blobs: usize,
 }
 
 /// High-level client coordinator binding `AnvilApiClient`, `EncryptedLocalCache`, and `VaultLockManager`.
@@ -1055,6 +1066,251 @@ impl ClientSyncEngine {
             .await?;
         let _ = self.lock.update_key_version(resp.key_version);
         Ok(resp.key_version)
+    }
+
+    /// Generates a brand-new `VaultKey`, re-encrypts all active folders, items, and blobs,
+    /// clears stale biometric enclave seals, and optionally revokes all other active sessions.
+    pub async fn emergency_rotate_vault_key(
+        &self,
+        current_master_password: &str,
+        revoke_other_sessions: bool,
+    ) -> Result<EmergencyKeyRotationReport, ClientError> {
+        let initial_acct = self
+            .cache
+            .load_account()
+            .await?
+            .ok_or(ClientError::NotConfigured)?;
+        let pending_conflicts = self.cache.list_conflicts(initial_acct.user_id).await?;
+        if !pending_conflicts.is_empty() {
+            return Err(ClientError::UnresolvedConflicts {
+                conflict_count: pending_conflicts.len(),
+            });
+        }
+
+        let sync_report = self.sync_now().await?;
+        if sync_report.pending_conflicts > 0 {
+            return Err(ClientError::UnresolvedConflicts {
+                conflict_count: sync_report.pending_conflicts,
+            });
+        }
+
+        let acct = self
+            .cache
+            .load_account()
+            .await?
+            .ok_or(ClientError::NotConfigured)?;
+        let salt = fixed_salt(&acct.kdf_salt)?;
+        let kdf_params = account_kdf_params(&acct)?;
+        let pw = MasterPassword::new(current_master_password);
+        let mk = derive_master_key(&pw, &salt, &kdf_params)?;
+        let (mek, cur_auth_hash) = derive_master_subkeys(&mk, &salt)?;
+        let old_vk = unwrap_vault_key(
+            &mek,
+            &acct.encrypted_vault_key,
+            acct.user_id,
+            acct.key_version,
+        )
+        .map_err(|_| ClientError::InvalidMasterPassword)?;
+        let old_subkeys = derive_vault_subkeys(&old_vk)?;
+
+        let new_vk = VaultKey::generate()?;
+        let new_subkeys = derive_vault_subkeys(&new_vk)?;
+        let new_key_version = acct.key_version.saturating_add(1);
+        let wrapped_new_vk = wrap_vault_key(&mek, &new_vk, acct.user_id, new_key_version)?;
+        let next_rev_hint = acct.last_synced_revision.saturating_add(1);
+
+        let cached_folders = self.cache.list_active_folders(acct.user_id).await?;
+        let mut decrypted_folders = Vec::with_capacity(cached_folders.len());
+        let mut req_folders = Vec::with_capacity(cached_folders.len());
+        let mut new_folder_records = Vec::with_capacity(cached_folders.len());
+
+        for cf in cached_folders {
+            let folder = decrypt_folder(
+                &old_subkeys,
+                acct.user_id,
+                &EncryptedFolderRecord {
+                    id: cf.id,
+                    encrypted_data: cf.encrypted_data,
+                    revision: cf.revision,
+                    deleted: cf.deleted,
+                    updated_at: cf.updated_at,
+                },
+            )?;
+            let reenc = encrypt_folder(&new_subkeys, acct.user_id, &folder, next_rev_hint)?;
+            req_folders.push(ReencryptRecordUpsertDto {
+                id: reenc.id,
+                encrypted_data_b64: STANDARD.encode(&reenc.encrypted_data),
+            });
+            new_folder_records.push(reenc);
+            decrypted_folders.push(folder);
+        }
+
+        let cached_items = self.cache.list_active_items(acct.user_id).await?;
+        let mut decrypted_items = Vec::with_capacity(cached_items.len());
+        let mut req_items = Vec::with_capacity(cached_items.len());
+        let mut new_item_records = Vec::with_capacity(cached_items.len());
+        let mut req_blobs = Vec::new();
+        let mut new_blob_records = Vec::new();
+
+        for ci in cached_items {
+            let item = decrypt_item(
+                &old_subkeys,
+                acct.user_id,
+                &EncryptedItemRecord {
+                    id: ci.id,
+                    encrypted_data: ci.encrypted_data,
+                    revision: ci.revision,
+                    deleted: ci.deleted,
+                    updated_at: ci.updated_at,
+                },
+            )?;
+            let reenc_item = encrypt_item(&new_subkeys, acct.user_id, &item, next_rev_hint)?;
+            req_items.push(ReencryptRecordUpsertDto {
+                id: reenc_item.id,
+                encrypted_data_b64: STANDARD.encode(&reenc_item.encrypted_data),
+            });
+            new_item_records.push(reenc_item);
+
+            if let Some(blob_id) = item.logo.blob_id {
+                let old_blob_rec = if let Some(cached) =
+                    self.cache.get_cached_blob(acct.user_id, blob_id).await?
+                {
+                    anvil_core::models::EncryptedBlobRecord {
+                        id: cached.id,
+                        item_id: cached.item_id,
+                        encrypted_blob: cached.encrypted_blob,
+                        revision: cached.revision,
+                        deleted: cached.deleted,
+                        updated_at: cached.updated_at,
+                    }
+                } else {
+                    let dl = self.api.get_blob(blob_id).await?;
+                    anvil_core::models::EncryptedBlobRecord {
+                        id: blob_id,
+                        item_id: dl.item_id.unwrap_or(item.id),
+                        encrypted_blob: dl.encrypted_bytes,
+                        revision: dl.revision,
+                        deleted: false,
+                        updated_at: Utc::now(),
+                    }
+                };
+                let plain_blob = decrypt_blob(&old_subkeys, acct.user_id, &old_blob_rec)?;
+                let reenc_blob =
+                    encrypt_blob(&new_subkeys, acct.user_id, &plain_blob, next_rev_hint)?;
+                req_blobs.push(BlobReencryptUpsertDto {
+                    id: reenc_blob.id,
+                    item_id: reenc_blob.item_id,
+                    encrypted_blob_b64: STANDARD.encode(&reenc_blob.encrypted_blob),
+                });
+                new_blob_records.push(reenc_blob);
+            }
+
+            decrypted_items.push(item);
+        }
+
+        let resp = self
+            .api
+            .rotate_vault_key(&RotateVaultKeyRequestDto {
+                current_master_auth_hash_b64: STANDARD.encode(cur_auth_hash.as_bytes()),
+                base_revision: acct.last_synced_revision,
+                new_key_version,
+                new_encrypted_vault_key_b64: STANDARD.encode(&wrapped_new_vk),
+                folders: req_folders,
+                items: req_items,
+                blobs: req_blobs,
+                revoke_other_sessions,
+            })
+            .await?;
+
+        self.cache
+            .update_key_material(
+                acct.user_id,
+                kdf_params,
+                &acct.kdf_salt,
+                resp.key_version,
+                &wrapped_new_vk,
+            )
+            .await?;
+        self.cache
+            .update_synced_revision(acct.user_id, resp.new_revision)
+            .await?;
+        self.cache.set_biometric_seal(acct.user_id, None).await?;
+
+        let folder_count = new_folder_records.len();
+        for f in new_folder_records {
+            self.cache
+                .upsert_cached_folder(
+                    acct.user_id,
+                    &CachedEncryptedFolder {
+                        id: f.id,
+                        encrypted_data: f.encrypted_data,
+                        revision: resp.new_revision,
+                        deleted: false,
+                        updated_at: f.updated_at,
+                    },
+                )
+                .await?;
+        }
+
+        let item_count = new_item_records.len();
+        for i in new_item_records {
+            self.cache
+                .upsert_cached_item(
+                    acct.user_id,
+                    &CachedEncryptedItem {
+                        id: i.id,
+                        encrypted_data: i.encrypted_data,
+                        revision: resp.new_revision,
+                        deleted: false,
+                        updated_at: i.updated_at,
+                    },
+                )
+                .await?;
+        }
+
+        let blob_count = new_blob_records.len();
+        for b in new_blob_records {
+            let sha = Sha256::digest(&b.encrypted_blob).to_vec();
+            let byte_size = i32::try_from(b.encrypted_blob.len())
+                .map_err(|_| ClientError::CacheIntegrity("rotated blob overflow".to_owned()))?;
+            self.cache
+                .upsert_cached_blob(
+                    acct.user_id,
+                    &CachedEncryptedBlob {
+                        id: b.id,
+                        item_id: b.item_id,
+                        encrypted_blob: b.encrypted_blob,
+                        byte_size,
+                        sha256_ciphertext: sha,
+                        revision: resp.new_revision,
+                        deleted: false,
+                        updated_at: b.updated_at,
+                    },
+                )
+                .await?;
+        }
+
+        if self.lock.is_unlocked() {
+            self.lock
+                .replace_vault_keys(resp.key_version, new_vk, new_subkeys)?;
+        } else {
+            self.lock.unlock(
+                acct.user_id,
+                resp.key_version,
+                new_vk,
+                new_subkeys,
+                decrypted_folders,
+                decrypted_items,
+            );
+        }
+
+        Ok(EmergencyKeyRotationReport {
+            key_version: resp.key_version,
+            new_revision: resp.new_revision,
+            reencrypted_folders: folder_count,
+            reencrypted_items: item_count,
+            reencrypted_blobs: blob_count,
+        })
     }
 
     /// Commits a parsed `ImportPreview` (encrypting every imported folder and item into local cache + queue).

@@ -369,3 +369,170 @@ async fn multi_device_differential_sync_conflicts_and_password_rotation() -> App
     assert_eq!(summaries_b.len(), 2);
     Ok(())
 }
+
+#[tokio::test]
+async fn emergency_vault_key_rotation_invalidates_compromised_key_and_syncs_cleanly()
+-> AppResult<()> {
+    let srv = spawn_test_server().await?;
+    let dir_a = TempDir::new()?;
+    let dir_b = TempDir::new()?;
+
+    let cache_a = EncryptedLocalCache::connect(&format!(
+        "sqlite:{}",
+        dir_a
+            .path()
+            .join("rot_a.db")
+            .to_string_lossy()
+            .replace('\\', "/")
+    ))
+    .await?;
+    let cache_b = EncryptedLocalCache::connect(&format!(
+        "sqlite:{}",
+        dir_b
+            .path()
+            .join("rot_b.db")
+            .to_string_lossy()
+            .replace('\\', "/")
+    ))
+    .await?;
+
+    let dev_a = ClientSyncEngine::new(
+        AnvilApiClient::new(&srv.base_url)?,
+        cache_a.clone(),
+        VaultLockManager::new(Duration::from_secs(300)),
+        "Workstation",
+        "windows",
+    );
+    dev_a
+        .register_and_unlock(
+            "emergency@example.com",
+            "MasterEmerg#2026!",
+            None,
+            fast_client_kdf(),
+        )
+        .await?;
+
+    let folder = dev_a.save_folder(VaultFolder::new("Finance")).await?;
+    let mut item = VaultItem::new_login(
+        "Stripe Admin",
+        LoginData {
+            username: "treasury".to_owned(),
+            email: "emergency@example.com".to_owned(),
+            password: "Stripe#OldCipherSecret".to_owned(),
+            password_history: Vec::new(),
+            uris: vec![ItemUri {
+                uri: "https://dashboard.stripe.com".to_owned(),
+                match_mode: UriMatchMode::BaseDomain,
+            }],
+            totp: None,
+        },
+    );
+    item.folder_id = Some(folder.id);
+    let saved_item = dev_a.save_item(item).await?;
+    let png_bytes = STANDARD.decode(SAMPLE_PNG_B64)?;
+    let (blob_id, _) = dev_a.attach_custom_logo(saved_item.id, &png_bytes).await?;
+    dev_a.sync_now().await?;
+
+    // Simulate leaked biometric seal + compromised old VaultKey & active Device B session.
+    let acct_a = cache_a.load_account().await?.ok_or("missing account A")?;
+    cache_a
+        .set_biometric_seal(acct_a.user_id, Some(b"stale-compromised-seal"))
+        .await?;
+    let (_, _, leaked_old_vk, leaked_old_subkeys) = dev_a.lock.keys_snapshot()?;
+
+    let dev_b = ClientSyncEngine::new(
+        AnvilApiClient::new(&srv.base_url)?,
+        cache_b.clone(),
+        VaultLockManager::new(Duration::from_secs(300)),
+        "Phone",
+        "ios",
+    );
+    dev_b
+        .login_and_unlock("emergency@example.com", "MasterEmerg#2026!")
+        .await?;
+
+    // Perform atomic emergency rotation on Device A and revoke all other sessions.
+    let report = dev_a
+        .emergency_rotate_vault_key("MasterEmerg#2026!", true)
+        .await?;
+    assert_eq!(report.key_version, 2);
+    assert_eq!(report.reencrypted_folders, 1);
+    assert_eq!(report.reencrypted_items, 1);
+    assert_eq!(report.reencrypted_blobs, 1);
+
+    // Local stale biometric seal must have been wiped.
+    let acct_after = cache_a
+        .load_account()
+        .await?
+        .ok_or("missing account after rotation")?;
+    assert_eq!(acct_after.biometric_sealed_vault_key, None);
+    assert_eq!(acct_after.key_version, 2);
+
+    // Compromised Device B session was revoked on the server.
+    assert!(dev_b.sync_now().await.is_err());
+
+    // Old leaked VaultKey cannot decrypt rotated folder, item, or blob ciphertexts on Device A.
+    let rotated_folders = cache_a.list_active_folders(acct_after.user_id).await?;
+    let rotated_items = cache_a.list_active_items(acct_after.user_id).await?;
+    let rotated_blob = cache_a
+        .get_cached_blob(acct_after.user_id, blob_id)
+        .await?
+        .ok_or("missing rotated cached blob")?;
+
+    assert!(
+        anvil_core::models::decrypt_folder(
+            &leaked_old_subkeys,
+            acct_after.user_id,
+            &anvil_core::models::EncryptedFolderRecord {
+                id: rotated_folders[0].id,
+                encrypted_data: rotated_folders[0].encrypted_data.clone(),
+                revision: rotated_folders[0].revision,
+                deleted: false,
+                updated_at: rotated_folders[0].updated_at,
+            },
+        )
+        .is_err()
+    );
+    assert!(
+        anvil_core::models::decrypt_item(
+            &leaked_old_subkeys,
+            acct_after.user_id,
+            &anvil_core::models::EncryptedItemRecord {
+                id: rotated_items[0].id,
+                encrypted_data: rotated_items[0].encrypted_data.clone(),
+                revision: rotated_items[0].revision,
+                deleted: false,
+                updated_at: rotated_items[0].updated_at,
+            },
+        )
+        .is_err()
+    );
+    assert!(
+        anvil_core::models::decrypt_blob(
+            &leaked_old_subkeys,
+            acct_after.user_id,
+            &anvil_core::models::EncryptedBlobRecord {
+                id: rotated_blob.id,
+                item_id: rotated_blob.item_id,
+                encrypted_blob: rotated_blob.encrypted_blob.clone(),
+                revision: rotated_blob.revision,
+                deleted: false,
+                updated_at: rotated_blob.updated_at,
+            },
+        )
+        .is_err()
+    );
+
+    // Fresh Device B login receives key_version 2 with new VaultKey and decrypts item & logo cleanly.
+    dev_b
+        .login_and_unlock("emergency@example.com", "MasterEmerg#2026!")
+        .await?;
+    let (_, b_ver, new_b_vk, _) = dev_b.lock.keys_snapshot()?;
+    assert_eq!(b_ver, 2);
+    assert_ne!(new_b_vk.as_bytes(), leaked_old_vk.as_bytes());
+    assert_eq!(dev_b.lock.get_item(saved_item.id)?.title, "Stripe Admin");
+    let loaded_logo = dev_b.load_custom_logo(saved_item.id, blob_id).await?;
+    assert!(!loaded_logo.data.is_empty());
+
+    Ok(())
+}

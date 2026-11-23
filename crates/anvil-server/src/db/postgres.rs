@@ -1,5 +1,6 @@
 //! PostgreSQL implementation of `VaultRepository`.
 
+use std::collections::HashSet;
 use std::str::FromStr;
 
 use chrono::{DateTime, Utc};
@@ -11,9 +12,10 @@ use crate::db::{
     ActiveSessionUser, AdminUserSummary, AuditLogInput, CreateItemOutcome, CreateSessionInput,
     DbError, DeleteRecordOutcome, DevicePlatform, InvitationRecord, PutBlobOutcome,
     RegisterOutcome, RegisterUserInput, RotatePasswordInput, RotatePasswordOutcome,
-    RotateRefreshOutcome, SessionRecord, StoredBlobData, StoredBlobMeta, StoredFolderRecord,
-    StoredItemRecord, SyncPushBatch, SyncPushOutcome, UpdateItemOutcome, UpdateUserAdminInput,
-    UpdateUserAdminOutcome, UserRecord, UserRole, VaultSyncState,
+    RotateRefreshOutcome, RotateVaultKeyInput, RotateVaultKeyOutcome, SessionRecord,
+    StoredBlobData, StoredBlobMeta, StoredFolderRecord, StoredItemRecord, SyncPushBatch,
+    SyncPushOutcome, UpdateItemOutcome, UpdateUserAdminInput, UpdateUserAdminOutcome, UserRecord,
+    UserRole, VaultSyncState,
 };
 
 fn is_unique_violation(err: &sqlx::Error) -> Option<String> {
@@ -641,6 +643,202 @@ pub async fn rotate_master_password(
     tx.commit().await?;
     Ok(RotatePasswordOutcome::Updated {
         key_version: input.new_key_version,
+        rotated_at: now,
+    })
+}
+
+pub async fn rotate_vault_key(
+    pool: &sqlx::PgPool,
+    input: RotateVaultKeyInput,
+) -> Result<RotateVaultKeyOutcome, DbError> {
+    let mut tx = pool.begin().await?;
+    let now = Utc::now();
+
+    let row = sqlx::query("SELECT key_version, sync_revision FROM users WHERE id = $1 FOR UPDATE")
+        .bind(input.user_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+    let Some(row) = row else {
+        return Ok(RotateVaultKeyOutcome::NotFound);
+    };
+    let current_version = to_u32(row.try_get("key_version")?, "key_version")?;
+    if input.new_key_version != current_version.saturating_add(1) {
+        return Ok(RotateVaultKeyOutcome::VersionMismatch);
+    }
+
+    let current_revision: i64 = row.try_get("sync_revision")?;
+    if input.base_revision != current_revision {
+        let delta_since = input.base_revision.clamp(0, current_revision);
+        let state = pull_vault_sync_tx(&mut tx, input.user_id, delta_since)
+            .await?
+            .ok_or_else(|| DbError::Integrity("user vanished inside tx".to_owned()))?;
+        return Ok(RotateVaultKeyOutcome::RevisionConflict(state));
+    }
+
+    let provided_folders: HashSet<Uuid> = input.folders.iter().map(|f| f.id).collect();
+    let provided_items: HashSet<Uuid> = input.items.iter().map(|i| i.id).collect();
+    let provided_blobs: HashSet<Uuid> = input.blobs.iter().map(|b| b.id).collect();
+
+    let missing_folders = sqlx::query(
+        "SELECT id FROM vault_folders WHERE user_id = $1 AND deleted = FALSE FOR UPDATE",
+    )
+    .bind(input.user_id)
+    .fetch_all(&mut *tx)
+    .await?
+    .into_iter()
+    .filter_map(|r| r.try_get::<Uuid, _>("id").ok())
+    .filter(|id| !provided_folders.contains(id))
+    .count();
+
+    let missing_items =
+        sqlx::query("SELECT id FROM vault_items WHERE user_id = $1 AND deleted = FALSE FOR UPDATE")
+            .bind(input.user_id)
+            .fetch_all(&mut *tx)
+            .await?
+            .into_iter()
+            .filter_map(|r| r.try_get::<Uuid, _>("id").ok())
+            .filter(|id| !provided_items.contains(id))
+            .count();
+
+    let missing_blobs =
+        sqlx::query("SELECT id FROM vault_blobs WHERE user_id = $1 AND deleted = FALSE FOR UPDATE")
+            .bind(input.user_id)
+            .fetch_all(&mut *tx)
+            .await?
+            .into_iter()
+            .filter_map(|r| r.try_get::<Uuid, _>("id").ok())
+            .filter(|id| !provided_blobs.contains(id))
+            .count();
+
+    if missing_folders > 0 || missing_items > 0 || missing_blobs > 0 {
+        return Ok(RotateVaultKeyOutcome::IncompleteBatch {
+            missing_folders,
+            missing_items,
+            missing_blobs,
+        });
+    }
+
+    let new_ver = i32::try_from(input.new_key_version)
+        .map_err(|_| DbError::Integrity("key_version overflow".to_owned()))?;
+    let new_revision = current_revision + 1;
+
+    sqlx::query(
+        "UPDATE users
+         SET key_version = $1,
+             encrypted_vault_key = $2,
+             sync_revision = $3,
+             updated_at = $4
+         WHERE id = $5",
+    )
+    .bind(new_ver)
+    .bind(&input.new_encrypted_vault_key)
+    .bind(new_revision)
+    .bind(now)
+    .bind(input.user_id)
+    .execute(&mut *tx)
+    .await?;
+
+    for folder in &input.folders {
+        sqlx::query(
+            "INSERT INTO vault_folders (id, user_id, encrypted_data, revision, deleted, updated_at)
+             VALUES ($1, $2, $3, $4, FALSE, $5)
+             ON CONFLICT (user_id, id) DO UPDATE
+             SET encrypted_data = EXCLUDED.encrypted_data,
+                 revision = EXCLUDED.revision,
+                 deleted = FALSE,
+                 updated_at = EXCLUDED.updated_at",
+        )
+        .bind(folder.id)
+        .bind(input.user_id)
+        .bind(&folder.encrypted_data)
+        .bind(new_revision)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    for item in &input.items {
+        sqlx::query(
+            "INSERT INTO vault_items (id, user_id, encrypted_data, revision, deleted, updated_at)
+             VALUES ($1, $2, $3, $4, FALSE, $5)
+             ON CONFLICT (user_id, id) DO UPDATE
+             SET encrypted_data = EXCLUDED.encrypted_data,
+                 revision = EXCLUDED.revision,
+                 deleted = FALSE,
+                 updated_at = EXCLUDED.updated_at",
+        )
+        .bind(item.id)
+        .bind(input.user_id)
+        .bind(&item.encrypted_data)
+        .bind(new_revision)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    for blob in &input.blobs {
+        let byte_size = i32::try_from(blob.encrypted_blob.len())
+            .map_err(|_| DbError::Integrity("blob byte_size overflow".to_owned()))?;
+        sqlx::query(
+            "INSERT INTO vault_blobs (
+                id, user_id, item_id, encrypted_blob, byte_size, sha256_ciphertext,
+                revision, deleted, created_at, updated_at
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, $8, $8)
+             ON CONFLICT (user_id, id) DO UPDATE
+             SET item_id = EXCLUDED.item_id,
+                 encrypted_blob = EXCLUDED.encrypted_blob,
+                 byte_size = EXCLUDED.byte_size,
+                 sha256_ciphertext = EXCLUDED.sha256_ciphertext,
+                 revision = EXCLUDED.revision,
+                 deleted = FALSE,
+                 updated_at = EXCLUDED.updated_at",
+        )
+        .bind(blob.id)
+        .bind(input.user_id)
+        .bind(blob.item_id)
+        .bind(&blob.encrypted_blob)
+        .bind(byte_size)
+        .bind(&blob.sha256_ciphertext)
+        .bind(new_revision)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    if input.revoke_other_sessions {
+        sqlx::query(
+            "UPDATE sessions
+             SET revoked_at = COALESCE(revoked_at, $1)
+             WHERE user_id = $2 AND id <> $3",
+        )
+        .bind(now)
+        .bind(input.user_id)
+        .bind(input.current_session_id)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    insert_audit_log_tx(
+        &mut tx,
+        AuditLogInput {
+            user_id: Some(input.user_id),
+            event_type: "vault_key_emergency_rotated",
+            actor_ip: input.actor_ip.as_deref(),
+            session_id: Some(input.current_session_id),
+            metadata_json: Some(format!(
+                r#"{{"key_version":{},"new_revision":{}}}"#,
+                input.new_key_version, new_revision
+            )),
+        },
+        now,
+    )
+    .await?;
+
+    tx.commit().await?;
+    Ok(RotateVaultKeyOutcome::Rotated {
+        key_version: input.new_key_version,
+        new_revision,
         rotated_at: now,
     })
 }
