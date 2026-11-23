@@ -26,10 +26,12 @@ Anvil centralizes all security-critical logic—key derivation, authenticated en
 ```text
 apps/
   desktop/             Anvil Desktop shell (Svelte 5 + TypeScript) and Win32/Tauri backend (`anvil-desktop`)
+  extension/           Browser extension (Manifest V3 for Chromium & Firefox) with closed Shadow DOM autofill
 crates/
   anvil-core/          Pure Rust crypto, vault models, TOTP, search, and importers/exporters
   anvil-client-core/   Offline encrypted SQLite cache, differential sync engine, and volatile RAM lock
   anvil-server/        Self-hosted Axum + SQLx API server (PostgreSQL & SQLite) and admin CLI
+  anvil-wasm/          WebAssembly crypto bridge, linear memory session, and eTLD+1 anti-phishing guard
 packages/
   anvil-ui/            Shared Svelte 5 + Tailwind v4 « Forge Moderne / Acier Sombre » UI library
 deploy/
@@ -70,8 +72,10 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo check -p anvil-core --target wasm32-unknown-unknown --no-default-features
+cargo build -p anvil-wasm --target wasm32-unknown-unknown
 pnpm --filter @anvil/ui check
 pnpm --filter @anvil/desktop check
+pnpm --filter @anvil/extension check
 ```
 
 ## Documentation
