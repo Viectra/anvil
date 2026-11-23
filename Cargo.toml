@@ -6,6 +6,7 @@ members = [
     "crates/anvil-client-core",
     "crates/anvil-wasm",
     "apps/desktop/src-tauri",
+    "apps/mobile/src-tauri",
 ]
 
 [workspace.package]

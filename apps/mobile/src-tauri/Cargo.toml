@@ -1,0 +1,29 @@
+[package]
+name = "anvil-mobile"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Anvil Mobile Tauri v2 backend, QR onboarding/TOTP parser, biometric enclave bridge, and OS autofill engine"
+
+[lints]
+workspace = true
+
+[dependencies]
+anvil-core = { path = "../../../crates/anvil-core" }
+anvil-client-core = { path = "../../../crates/anvil-client-core" }
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+url.workspace = true
+uuid.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+anvil-server = { path = "../../../crates/anvil-server" }
+axum.workspace = true
+tempfile.workspace = true

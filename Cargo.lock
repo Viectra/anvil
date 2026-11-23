@@ -186,6 +186,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "anvil-mobile"
+version = "0.1.0"
+dependencies = [
+ "anvil-client-core",
+ "anvil-core",
+ "anvil-server",
+ "axum",
+ "chrono",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "uuid",
+ "zeroize",
+]
+
+[[package]]
 name = "anvil-server"
 version = "0.1.0"
 dependencies = [
