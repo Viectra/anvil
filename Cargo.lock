@@ -223,6 +223,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "anvil-wasm"
+version = "0.1.0"
+dependencies = [
+ "anvil-core",
+ "base64 0.22.1",
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "url",
+ "uuid",
+ "wasm-bindgen",
+ "zeroize",
+]
+
+[[package]]
 name = "anyhow"
 version = "1.0.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"

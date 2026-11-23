@@ -4,6 +4,7 @@ members = [
     "crates/anvil-core",
     "crates/anvil-server",
     "crates/anvil-client-core",
+    "crates/anvil-wasm",
     "apps/desktop/src-tauri",
 ]
 
