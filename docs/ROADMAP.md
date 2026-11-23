@@ -1,6 +1,6 @@
 # Feuille de Route & Plan d'Exécution Incrémental — **Anvil**
 
-> **Statut actuel** : **Phase 4 terminée (`anvil-wasm` & Extension MV3) — Phase 5 à démarrer**  
+> **Statut actuel** : **Phase 5 terminée (`Anvil Mobile` Android/iOS & Autofill OS) — Phase 6 à démarrer**  
 > **Référence technique** : [`ARCHITECTURE.md`](./ARCHITECTURE.md)
 
 ---
@@ -35,8 +35,8 @@ flowchart LR
     P2["Phase 2: anvil-server, Multi-Utilisateurs et Docker (Terminee)"]
     P3["Phase 3: anvil-client-core, anvil-ui et Anvil Desktop (Terminee)"]
     P4["Phase 4: anvil-wasm et Extension MV3 Anvil Browser (Terminee)"]
-    P5["Phase 5: Anvil Mobile (Android/iOS) et Autofill OS (Prochaine)"]
-    P6["Phase 6: Audit Securite, Fuzzing et Release v1.0"]
+    P5["Phase 5: Anvil Mobile (Android/iOS) et Autofill OS (Terminee)"]
+    P6["Phase 6: Audit Securite, Fuzzing et Release v1.0 (Prochaine)"]
 
     P0 --> P1 --> P2 --> P3 --> P4 --> P5 --> P6
 ```

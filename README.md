@@ -27,6 +27,7 @@ Anvil centralizes all security-critical logic—key derivation, authenticated en
 apps/
   desktop/             Anvil Desktop shell (Svelte 5 + TypeScript) and Win32/Tauri backend (`anvil-desktop`)
   extension/           Browser extension (Manifest V3 for Chromium & Firefox) with closed Shadow DOM autofill
+  mobile/              Anvil Mobile touch UI (Svelte 5 + Tauri v2), QR onboarding/TOTP, and Android/iOS Autofill
 crates/
   anvil-core/          Pure Rust crypto, vault models, TOTP, search, and importers/exporters
   anvil-client-core/   Offline encrypted SQLite cache, differential sync engine, and volatile RAM lock
@@ -76,6 +77,7 @@ cargo build -p anvil-wasm --target wasm32-unknown-unknown
 pnpm --filter @anvil/ui check
 pnpm --filter @anvil/desktop check
 pnpm --filter @anvil/extension check
+pnpm --filter @anvil/mobile check
 ```
 
 ## Documentation
