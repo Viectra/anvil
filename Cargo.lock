@@ -165,6 +165,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "anvil-desktop"
+version = "0.1.0"
+dependencies = [
+ "anvil-client-core",
+ "anvil-core",
+ "base64 0.22.1",
+ "chrono",
+ "serde",
+ "serde_json",
+ "sha2",
+ "subtle",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "zeroize",
+]
+
+[[package]]
 name = "anvil-server"
 version = "0.1.0"
 dependencies = [

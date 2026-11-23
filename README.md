@@ -24,9 +24,14 @@ Anvil centralizes all security-critical logic—key derivation, authenticated en
 ## Workspace Layout
 
 ```text
+apps/
+  desktop/             Anvil Desktop shell (Svelte 5 + TypeScript) and Win32/Tauri backend (`anvil-desktop`)
 crates/
   anvil-core/          Pure Rust crypto, vault models, TOTP, search, and importers/exporters
+  anvil-client-core/   Offline encrypted SQLite cache, differential sync engine, and volatile RAM lock
   anvil-server/        Self-hosted Axum + SQLx API server (PostgreSQL & SQLite) and admin CLI
+packages/
+  anvil-ui/            Shared Svelte 5 + Tailwind v4 « Forge Moderne / Acier Sombre » UI library
 deploy/
   Dockerfile           Multi-stage non-root container build
   docker-compose.yml   Hardened PostgreSQL 16 and SQLite compose stacks
@@ -65,6 +70,8 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo check -p anvil-core --target wasm32-unknown-unknown --no-default-features
+pnpm --filter @anvil/ui check
+pnpm --filter @anvil/desktop check
 ```
 
 ## Documentation
