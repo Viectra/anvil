@@ -1,0 +1,2497 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Anvil</title>
+    <style>
+      :root {
+        --bg-void: #0e1015;
+        --bg-surface: #13161d;
+        --bg-elevated: #191c24;
+        --bg-hover: #212531;
+        --border-subtle: #262b38;
+        --border-strong: #353c4f;
+        --text-primary: #f1f3f7;
+        --text-secondary: #9aa4b8;
+        --text-muted: #667085;
+        --accent-copper: #e07a2f;
+        --accent-copper-hover: #ec8a42;
+        --accent-steel: #5b8def;
+        --status-ok: #2ecc71;
+        --status-warn: #f59e0b;
+        --status-danger: #e63946;
+        --mono: ui-monospace, "Cascadia Mono", "Consolas", monospace;
+        --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        width: 100%;
+        background: var(--bg-void);
+        color: var(--text-primary);
+        font-family: var(--sans);
+        font-size: 13.5px;
+        line-height: 1.45;
+        overflow: hidden;
+      }
+
+      button,
+      input,
+      select,
+      textarea {
+        font-family: inherit;
+        font-size: inherit;
+        color: inherit;
+      }
+
+      button {
+        cursor: pointer;
+        border: 1px solid var(--border-subtle);
+        background: var(--bg-elevated);
+        border-radius: 7px;
+        padding: 7px 12px;
+        transition: background 0.14s ease, border-color 0.14s ease, opacity 0.14s ease;
+      }
+
+      button:hover:not(:disabled) {
+        background: var(--bg-hover);
+        border-color: var(--border-strong);
+      }
+
+      button:disabled {
+        opacity: 0.48;
+        cursor: not-allowed;
+      }
+
+      button.primary {
+        background: var(--accent-copper);
+        border-color: var(--accent-copper);
+        color: #101218;
+        font-weight: 600;
+      }
+
+      button.primary:hover:not(:disabled) {
+        background: var(--accent-copper-hover);
+        border-color: var(--accent-copper-hover);
+      }
+
+      button.danger {
+        color: #ffb4ba;
+        border-color: rgba(230, 57, 70, 0.45);
+        background: rgba(230, 57, 70, 0.12);
+      }
+
+      button.danger:hover:not(:disabled) {
+        background: rgba(230, 57, 70, 0.24);
+      }
+
+      button.ghost {
+        background: transparent;
+        border-color: transparent;
+      }
+
+      button.ghost:hover:not(:disabled) {
+        background: var(--bg-hover);
+        border-color: var(--border-subtle);
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        background: var(--bg-void);
+        border: 1px solid var(--border-subtle);
+        border-radius: 7px;
+        padding: 8px 10px;
+        outline: none;
+      }
+
+      input:focus,
+      select:focus,
+      textarea:focus {
+        border-color: var(--accent-copper);
+      }
+
+      input[type="checkbox"] {
+        width: auto;
+        accent-color: var(--accent-copper);
+      }
+
+      .mono {
+        font-family: var(--mono);
+      }
+
+      .app-root {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        width: 100vw;
+      }
+
+      .topbar {
+        height: 52px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0 14px;
+        background: var(--bg-surface);
+        border-bottom: 1px solid var(--border-subtle);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        min-width: 170px;
+      }
+
+      .brand-tag {
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: rgba(91, 141, 239, 0.16);
+        color: var(--accent-steel);
+        border: 1px solid rgba(91, 141, 239, 0.35);
+      }
+
+      .search-wrap {
+        flex: 1;
+        max-width: 420px;
+        position: relative;
+      }
+
+      .search-wrap input {
+        padding-right: 54px;
+        background: var(--bg-void);
+      }
+
+      .kbd-hint {
+        position: absolute;
+        right: 9px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 11px;
+        color: var(--text-muted);
+        border: 1px solid var(--border-subtle);
+        border-radius: 4px;
+        padding: 1px 5px;
+        pointer-events: none;
+      }
+
+      .topbar-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .error-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 7px 14px;
+        background: rgba(230, 57, 70, 0.14);
+        border-bottom: 1px solid rgba(230, 57, 70, 0.38);
+        color: #ff9ba3;
+        font-size: 12.5px;
+        flex-shrink: 0;
+      }
+
+      .unlock-screen {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        overflow-y: auto;
+        background: radial-gradient(circle at top, rgba(224, 122, 47, 0.08), transparent 46%),
+          var(--bg-surface);
+      }
+
+      .unlock-card {
+        width: 100%;
+        max-width: 410px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: 12px;
+        padding: 26px;
+      }
+
+      .unlock-head {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+      }
+
+      .unlock-head h1 {
+        margin: 10px 0 4px;
+        font-size: 20px;
+      }
+
+      .unlock-head p {
+        margin: 0;
+        color: var(--text-secondary);
+        font-size: 12.5px;
+      }
+
+      .tabs {
+        display: flex;
+        gap: 4px;
+        margin: 18px 0 16px;
+        padding: 4px;
+        background: var(--bg-void);
+        border: 1px solid var(--border-subtle);
+        border-radius: 8px;
+      }
+
+      .tabs button {
+        flex: 1;
+        border: none;
+        background: transparent;
+        color: var(--text-secondary);
+        font-size: 12.5px;
+        padding: 6px 8px;
+      }
+
+      .tabs button.active {
+        background: var(--bg-elevated);
+        color: var(--text-primary);
+        border: 1px solid var(--border-subtle);
+        font-weight: 600;
+      }
+
+      .form-group {
+        margin-bottom: 12px;
+      }
+
+      .form-label {
+        display: block;
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-bottom: 5px;
+      }
+
+      .workspace {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 230px 300px 1fr;
+        min-height: 0;
+      }
+
+      .sidebar {
+        background: var(--bg-surface);
+        border-right: 1px solid var(--border-subtle);
+        display: flex;
+        flex-direction: column;
+        padding: 12px;
+        overflow-y: auto;
+      }
+
+      .nav-section-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-muted);
+        margin: 14px 6px 6px;
+      }
+
+      .nav-btn {
+        width: 100%;
+        text-align: left;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 7px 10px;
+        border-radius: 7px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--text-secondary);
+        margin-bottom: 2px;
+      }
+
+      .nav-btn:hover {
+        background: var(--bg-hover);
+        color: var(--text-primary);
+        border-color: transparent;
+      }
+
+      .nav-btn.active {
+        background: rgba(224, 122, 47, 0.14);
+        border-color: rgba(224, 122, 47, 0.36);
+        color: var(--text-primary);
+        font-weight: 500;
+      }
+
+      .folder-row {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .folder-del {
+        padding: 4px 7px;
+        font-size: 11px;
+        color: var(--text-muted);
+        opacity: 0.65;
+      }
+
+      .folder-del:hover {
+        opacity: 1;
+        color: #ff9ba3;
+      }
+
+      .sidebar-footer {
+        margin-top: auto;
+        padding-top: 12px;
+        border-top: 1px solid var(--border-subtle);
+        font-size: 12px;
+        color: var(--text-secondary);
+      }
+
+      .list-pane {
+        background: var(--bg-void);
+        border-right: 1px solid var(--border-subtle);
+        overflow-y: auto;
+        padding: 8px;
+      }
+
+      .item-row {
+        width: 100%;
+        text-align: left;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 10px;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        background: transparent;
+        margin-bottom: 4px;
+      }
+
+      .item-row:hover {
+        background: var(--bg-surface);
+        border-color: var(--border-subtle);
+      }
+
+      .item-row.active {
+        background: var(--bg-elevated);
+        border-color: var(--accent-copper);
+      }
+
+      .avatar {
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 12px;
+        color: #fff;
+        flex-shrink: 0;
+        overflow: hidden;
+      }
+
+      .avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .item-meta {
+        min-width: 0;
+        flex: 1;
+      }
+
+      .item-title {
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .item-sub {
+        font-size: 12px;
+        color: var(--text-secondary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .pill {
+        font-size: 10.5px;
+        padding: 1px 6px;
+        border-radius: 999px;
+        border: 1px solid var(--border-subtle);
+        color: var(--text-secondary);
+      }
+
+      .pill.totp {
+        border-color: rgba(91, 141, 239, 0.45);
+        color: var(--accent-steel);
+      }
+
+      .detail-pane {
+        background: var(--bg-surface);
+        overflow-y: auto;
+        padding: 22px 26px;
+      }
+
+      .detail-card {
+        max-width: 720px;
+        margin: 0 auto;
+      }
+
+      .detail-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid var(--border-subtle);
+        margin-bottom: 18px;
+      }
+
+      .detail-identity {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        min-width: 0;
+      }
+
+      .detail-identity .avatar {
+        width: 48px;
+        height: 48px;
+        font-size: 16px;
+      }
+
+      .detail-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .field-box {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: 9px;
+        padding: 12px 14px;
+        margin-bottom: 12px;
+      }
+
+      .field-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .field-name {
+        font-size: 11.5px;
+        color: var(--text-secondary);
+        margin-bottom: 4px;
+      }
+
+      .field-value {
+        font-size: 14px;
+        word-break: break-all;
+      }
+
+      .totp-box {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 14px 16px;
+        border-radius: 9px;
+        background: rgba(91, 141, 239, 0.08);
+        border: 1px solid rgba(91, 141, 239, 0.35);
+        margin-bottom: 12px;
+      }
+
+      .totp-code {
+        font-family: var(--mono);
+        font-size: 26px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        color: var(--text-primary);
+      }
+
+      .totp-ring-wrap {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .strength-track {
+        height: 5px;
+        width: 100%;
+        border-radius: 999px;
+        background: var(--bg-void);
+        overflow: hidden;
+        margin-top: 8px;
+      }
+
+      .strength-fill {
+        height: 100%;
+        transition: width 0.2s ease;
+      }
+
+      .row-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+      }
+
+      .empty-state {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-secondary);
+        text-align: center;
+        padding: 32px;
+      }
+
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(6, 8, 12, 0.74);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        z-index: 40;
+      }
+
+      .modal {
+        width: 100%;
+        max-width: 560px;
+        max-height: 88vh;
+        overflow-y: auto;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-strong);
+        border-radius: 12px;
+        padding: 20px;
+      }
+
+      .modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 14px;
+      }
+
+      .modal-header h2 {
+        margin: 0;
+        font-size: 16.5px;
+      }
+
+      .toast {
+        position: fixed;
+        right: 18px;
+        bottom: 18px;
+        min-width: 250px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--accent-copper);
+        border-radius: 9px;
+        padding: 10px 14px;
+        z-index: 50;
+      }
+
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .sub-row {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app" class="app-root"></div>
+    <script>
+      (() => {
+        "use strict";
+
+        const BRIDGE_TOKEN = __ANVIL_BOOTSTRAP_TOKEN__;
+        const DEFAULT_SERVER_URL = __ANVIL_DEFAULT_SERVER_URL__;
+
+        const IMPORT_FORMATS = [
+          ["bitwarden_json", "Bitwarden JSON (non chiffré)"],
+          ["bitwarden_encrypted_json", "Bitwarden JSON (chiffré)"],
+          ["bitwarden_csv", "Bitwarden CSV"],
+          ["chrome_csv", "Chrome CSV"],
+          ["edge_csv", "Edge CSV"],
+          ["brave_csv", "Brave CSV"],
+          ["firefox_csv", "Firefox CSV"],
+          ["keepass_csv", "KeePass / KeePassXC CSV"],
+          ["keepass_xml", "KeePass / KeePassXC XML"],
+          ["one_password_csv", "1Password CSV"],
+          ["one_password_1pux", "1Password (.1pux)"],
+          ["proton_pass_csv", "Proton Pass CSV"],
+          ["dashlane_csv", "Dashlane CSV"],
+        ];
+
+        const state = {
+          status: {
+            configured: false,
+            authenticated: false,
+            unlocked: false,
+            biometric_available: false,
+            biometric_enabled: false,
+            server_url: null,
+            email: null,
+            sync_revision: 0,
+            pending_conflicts: 0,
+          },
+          authMode: "login",
+          authServerUrl: DEFAULT_SERVER_URL || "http://127.0.0.1:8080",
+          authEmail: "",
+          authInvite: "",
+          busy: false,
+          syncing: false,
+          error: null,
+          navFilter: { kind: "all", folderId: null },
+          searchQuery: "",
+          folders: [],
+          items: [],
+          selectedItemId: null,
+          selectedItem: null,
+          selectedStrength: null,
+          revealPassword: false,
+          editing: false,
+          editForm: null,
+          totp: null,
+          showAddFolder: false,
+          showBiometricPrompt: false,
+          modal: null,
+          importPreview: null,
+          conflicts: [],
+          toast: null,
+          genResult: null,
+          genOpts: {
+            mode: "random",
+            length: 20,
+            uppercase: true,
+            lowercase: true,
+            digits: true,
+            symbols: true,
+            exclude_ambiguous: true,
+            word_count: 5,
+            separator: "-",
+            capitalize: true,
+            include_number: true,
+          },
+        };
+
+        async function ipc(command, payload = {}) {
+          const response = await fetch("/api/desktop-ipc", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-anvil-bridge-token": BRIDGE_TOKEN,
+            },
+            body: JSON.stringify({ command, payload }),
+          });
+          let env;
+          try {
+            env = await response.json();
+          } catch {
+            throw new Error(`Réponse IPC invalide (HTTP ${response.status})`);
+          }
+          if (!response.ok || !env.ok) {
+            throw new Error(env.error || `Erreur IPC (HTTP ${response.status})`);
+          }
+          return env.data;
+        }
+
+        function el(tag, attrs = {}, children = []) {
+          const node = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (v === undefined || v === null || v === false) continue;
+            if (k === "class") node.className = v;
+            else if (k === "text") node.textContent = String(v);
+            else if (k === "value") node.value = String(v);
+            else if (k === "checked") node.checked = Boolean(v);
+            else if (k === "disabled") node.disabled = Boolean(v);
+            else if (k.startsWith("on") && typeof v === "function") {
+              node.addEventListener(k.slice(2).toLowerCase(), v);
+            } else if (k === "style" && typeof v === "object") {
+              Object.assign(node.style, v);
+            } else {
+              node.setAttribute(k, String(v));
+            }
+          }
+          for (const child of Array.isArray(children) ? children : [children]) {
+            if (child === null || child === undefined || child === false) continue;
+            node.appendChild(typeof child === "string" ? document.createTextNode(child) : child);
+          }
+          return node;
+        }
+
+        function makeLogoSvg(size = 24) {
+          const ns = "http://www.w3.org/2000/svg";
+          const svg = document.createElementNS(ns, "svg");
+          svg.setAttribute("viewBox", "0 0 64 64");
+          svg.setAttribute("width", String(size));
+          svg.setAttribute("height", String(size));
+          svg.setAttribute("fill", "none");
+
+          const p1 = document.createElementNS(ns, "path");
+          p1.setAttribute("d", "M22 6H42L54 16V35L32 58L10 35V16L22 6Z");
+          p1.setAttribute("fill", "#191C24");
+          p1.setAttribute("stroke", "#2E3444");
+          p1.setAttribute("stroke-width", "2.5");
+          svg.appendChild(p1);
+
+          const p2 = document.createElementNS(ns, "path");
+          p2.setAttribute("d", "M14 25.5H47.5V27.6H41.5L37.5 31V38.2L43.5 43V46H20.5V43L26.5 38.2V31L21.5 27.8L14 25.5Z");
+          p2.setAttribute("fill", "#F1F3F7");
+          svg.appendChild(p2);
+
+          const p3 = document.createElementNS(ns, "path");
+          p3.setAttribute("d", "M13.5 22.5H48V26H14.5L13.5 22.5Z");
+          p3.setAttribute("fill", "#E07A2F");
+          svg.appendChild(p3);
+          return svg;
+        }
+
+        function strengthStyle(score) {
+          if (score <= 1) return { pct: 25, color: "var(--status-danger)", label: "Faible" };
+          if (score === 2) return { pct: 50, color: "var(--status-warn)", label: "Moyen" };
+          if (score === 3) return { pct: 75, color: "var(--accent-steel)", label: "Bon" };
+          return { pct: 100, color: "var(--status-ok)", label: "Robuste" };
+        }
+
+        function formatTotpCode(code) {
+          if (!code) return "";
+          if (code.length === 6) return `${code.slice(0, 3)} ${code.slice(3)}`;
+          if (code.length === 8) return `${code.slice(0, 4)} ${code.slice(4)}`;
+          return code;
+        }
+
+        function startToastCountdown() {
+          setInterval(() => {
+            if (!state.toast) return;
+            const rem = Math.max(0, Math.ceil((state.toast.expires_at_ms - Date.now()) / 1000));
+            const toastEl = document.getElementById("clipboard-toast-sec");
+            if (rem <= 0) {
+              state.toast = null;
+              render();
+            } else if (toastEl) {
+              toastEl.textContent = `${rem} s`;
+            }
+          }, 500);
+        }
+
+        async function refreshTotpNow() {
+          const item = state.selectedItem;
+          if (!state.status.unlocked || state.editing || !item || !item.login || !item.login.totp) {
+            state.totp = null;
+            return;
+          }
+          try {
+            const nowSec = Math.floor(Date.now() / 1000);
+            state.totp = await ipc("cmd_generate_totp", {
+              secretOrUri: item.login.totp.secret_base32,
+              unixTimestampSeconds: nowSec,
+            });
+            const codeEl = document.getElementById("live-totp-code");
+            const secEl = document.getElementById("live-totp-sec");
+            if (codeEl && secEl && state.totp) {
+              codeEl.textContent = formatTotpCode(state.totp.code);
+              secEl.textContent = `${state.totp.remaining_seconds} s`;
+            }
+          } catch {
+            state.totp = null;
+          }
+        }
+
+        function startTotpLoop() {
+          setInterval(() => {
+            if (state.status.unlocked && !state.editing && state.selectedItem?.login?.totp) {
+              void refreshTotpNow();
+            }
+          }, 1000);
+        }
+
+        async function runSafe(fn) {
+          state.busy = true;
+          state.error = null;
+          render();
+          try {
+            await fn();
+          } catch (err) {
+            state.error = err instanceof Error ? err.message : String(err);
+          } finally {
+            state.busy = false;
+            render();
+          }
+        }
+
+        async function refreshAll(preferredItemId = null) {
+          state.status = await ipc("cmd_status");
+          if (!state.status.unlocked) {
+            state.folders = [];
+            state.items = [];
+            state.selectedItemId = null;
+            state.selectedItem = null;
+            state.selectedStrength = null;
+            state.totp = null;
+            state.editing = false;
+            if (state.status.configured && state.authMode !== "register") {
+              state.authMode = "unlock";
+            } else if (!state.status.configured && state.authMode === "unlock") {
+              state.authMode = "register";
+            }
+            if (state.status.server_url) state.authServerUrl = state.status.server_url;
+            if (state.status.email) state.authEmail = state.status.email;
+            return;
+          }
+
+          state.folders = await ipc("cmd_list_folders");
+          state.items = await ipc("cmd_list_items", {
+            query: state.searchQuery,
+            folderId: state.navFilter.kind === "folder" ? state.navFilter.folderId : null,
+            favoritesOnly: state.navFilter.kind === "favorites",
+            trashedOnly: state.navFilter.kind === "trash",
+          });
+          if (state.navFilter.kind === "totp") {
+            state.items = state.items.filter((i) => i.has_totp);
+          }
+
+          if (state.status.pending_conflicts > 0) {
+            state.conflicts = await ipc("cmd_list_conflicts");
+          } else {
+            state.conflicts = [];
+          }
+
+          const targetId = preferredItemId || state.selectedItemId;
+          if (targetId && state.items.some((i) => i.id === targetId)) {
+            await selectItem(targetId, false);
+          } else if (state.items.length > 0) {
+            await selectItem(state.items[0].id, false);
+          } else {
+            state.selectedItemId = null;
+            state.selectedItem = null;
+            state.selectedStrength = null;
+            state.totp = null;
+          }
+        }
+
+        async function selectItem(id, rerender = true) {
+          state.selectedItemId = id;
+          state.revealPassword = false;
+          state.editing = false;
+          state.selectedItem = await ipc("cmd_get_item", { id });
+          const pw = state.selectedItem?.login?.password || "";
+          state.selectedStrength = pw ? await ipc("cmd_evaluate_password", { value: pw }) : null;
+          await refreshTotpNow();
+          if (rerender) render();
+        }
+
+        async function copySecret(label, value) {
+          if (!value) return;
+          state.toast = await ipc("cmd_copy_secret", { label, value });
+          render();
+        }
+
+        function beginEdit(item) {
+          const isNew = !item;
+          state.editing = true;
+          state.editForm = {
+            id: isNew ? null : item.id,
+            kind: isNew ? "login" : item.kind,
+            title: isNew ? "" : item.title,
+            folder_id: isNew
+              ? state.navFilter.kind === "folder"
+                ? state.navFilter.folderId || ""
+                : ""
+              : item.folder_id || "",
+            favorite: isNew ? false : Boolean(item.favorite),
+            trashed_at: isNew ? null : item.trashed_at,
+            username: item?.login?.username || "",
+            email: item?.login?.email || "",
+            password: item?.login?.password || "",
+            password_history: item?.login?.password_history || [],
+            totp_secret: item?.login?.totp?.secret_base32 || "",
+            totp_algorithm: item?.login?.totp?.algorithm || "SHA1",
+            totp_digits: item?.login?.totp?.digits || 6,
+            totp_period: item?.login?.totp?.period_seconds || 30,
+            uris: item?.login?.uris?.length ? item.login.uris.map((u) => ({ ...u })) : [{ uri: "", match_mode: "base_domain" }],
+            custom_fields: item?.custom_fields?.length ? item.custom_fields.map((c) => ({ ...c })) : [],
+            notes: item?.notes || "",
+          };
+          render();
+        }
+
+        function renderUnlockScreen() {
+          const card = el("div", { class: "unlock-card" });
+          const subtitle =
+            state.authMode === "unlock"
+              ? "Déverrouillez votre coffre chiffré localement."
+              : state.authMode === "register"
+                ? "Créez un coffre local Zero-Knowledge prêt à l'emploi."
+                : "Connexion à une instance Anvil existante.";
+
+          card.appendChild(
+            el("div", { class: "unlock-head" }, [
+              makeLogoSvg(54),
+              el("h1", { text: "Anvil" }),
+              el("p", { text: subtitle }),
+            ]),
+          );
+
+          const tabs = el("div", { class: "tabs" });
+          if (state.status.configured) {
+            tabs.appendChild(
+              el("button", {
+                type: "button",
+                class: state.authMode === "unlock" ? "active" : "",
+                text: "Déverrouiller",
+                onClick: () => {
+                  state.authMode = "unlock";
+                  render();
+                },
+              }),
+            );
+          }
+          tabs.appendChild(
+            el("button", {
+              type: "button",
+              class: state.authMode === "register" ? "active" : "",
+              text: "Créer un compte",
+              onClick: () => {
+                state.authMode = "register";
+                render();
+              },
+            }),
+          );
+          tabs.appendChild(
+            el("button", {
+              type: "button",
+              class: state.authMode === "login" ? "active" : "",
+              text: "Connexion",
+              onClick: () => {
+                state.authMode = "login";
+                render();
+              },
+            }),
+          );
+          card.appendChild(tabs);
+
+          const serverInput = el("input", {
+            type: "url",
+            value: state.authServerUrl,
+            placeholder: "http://127.0.0.1:18420",
+            onInput: (e) => {
+              state.authServerUrl = e.target.value;
+            },
+          });
+          const emailInput = el("input", {
+            type: "email",
+            value: state.authEmail,
+            placeholder: "vous@exemple.com",
+            onInput: (e) => {
+              state.authEmail = e.target.value;
+            },
+          });
+          const pwInput = el("input", {
+            type: "password",
+            placeholder: "Master Password",
+            required: true,
+          });
+          const inviteInput = el("input", {
+            type: "text",
+            value: state.authInvite,
+            placeholder: "Optionnel (non requis en local)",
+            onInput: (e) => {
+              state.authInvite = e.target.value;
+            },
+          });
+
+          const form = el("form", {
+            onSubmit: (e) => {
+              e.preventDefault();
+              const pw = pwInput.value;
+              pwInput.value = "";
+              if (!pw) return;
+              void runSafe(async () => {
+                if (state.authMode === "unlock") {
+                  await ipc("cmd_unlock_password", { masterPassword: pw });
+                } else if (state.authMode === "register") {
+                  await ipc("cmd_register", {
+                    serverUrl: state.authServerUrl.trim(),
+                    email: state.authEmail.trim(),
+                    masterPassword: pw,
+                    inviteToken: state.authInvite.trim() || null,
+                  });
+                } else {
+                  await ipc("cmd_login", {
+                    serverUrl: state.authServerUrl.trim(),
+                    email: state.authEmail.trim(),
+                    masterPassword: pw,
+                  });
+                }
+                await refreshAll();
+              });
+            },
+          });
+
+          if (state.authMode !== "unlock") {
+            form.appendChild(el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "URL du serveur Anvil" }), serverInput]));
+            form.appendChild(el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "Adresse email" }), emailInput]));
+          } else {
+            form.appendChild(
+              el("div", { class: "field-box", style: { marginBottom: "12px" } }, [
+                el("div", { class: "field-name", text: "Compte configuré" }),
+                el("div", { text: state.status.email || "-" }),
+                el("div", { style: { fontSize: "11.5px", color: "var(--text-secondary)" }, text: state.status.server_url || "" }),
+              ]),
+            );
+          }
+
+          form.appendChild(el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "Master Password" }), pwInput]));
+
+          if (state.authMode === "register") {
+            form.appendChild(el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "Jeton d'invitation" }), inviteInput]));
+          }
+
+          form.appendChild(
+            el("button", {
+              type: "submit",
+              class: "primary",
+              style: { width: "100%", marginTop: "6px" },
+              disabled: state.busy,
+              text:
+                state.authMode === "unlock"
+                  ? "Déverrouiller le coffre"
+                  : state.authMode === "register"
+                    ? "Créer le coffre Zero-Knowledge"
+                    : "Se connecter et synchroniser",
+            }),
+          );
+
+          if (state.authMode === "unlock" && state.status.biometric_available && state.status.biometric_enabled) {
+            form.appendChild(
+              el("button", {
+                type: "button",
+                style: { width: "100%", marginTop: "8px" },
+                disabled: state.busy,
+                text: "Déverrouiller via Windows DPAPI",
+                onClick: () =>
+                  void runSafe(async () => {
+                    await ipc("cmd_unlock_biometric");
+                    await refreshAll();
+                  }),
+              }),
+            );
+          }
+
+          card.appendChild(form);
+          return el("div", { class: "unlock-screen" }, [card]);
+        }
+
+        function renderEditor() {
+          const f = state.editForm;
+          const card = el("div", { class: "detail-card" });
+          card.appendChild(
+            el("div", { class: "detail-header" }, [
+              el("h2", { style: { margin: 0 }, text: f.id ? "Modifier la fiche" : "Nouvelle fiche" }),
+              el("div", { class: "detail-actions" }, [
+                el("button", {
+                  type: "button",
+                  text: "Annuler",
+                  onClick: () => {
+                    state.editing = false;
+                    render();
+                  },
+                }),
+                el("button", {
+                  type: "button",
+                  class: "primary",
+                  disabled: state.busy,
+                  text: "Enregistrer",
+                  onClick: () =>
+                    void runSafe(async () => {
+                      const cleanTotp = f.totp_secret.trim();
+                      const input = {
+                        id: f.id,
+                        kind: f.kind,
+                        title: f.title,
+                        folder_id: f.folder_id || null,
+                        favorite: f.favorite,
+                        trashed_at: f.trashed_at,
+                        login:
+                          f.kind === "login"
+                            ? {
+                                username: f.username,
+                                email: f.email,
+                                password: f.password,
+                                password_history: f.password_history,
+                                uris: f.uris.filter((u) => u.uri.trim().length > 0),
+                                totp: cleanTotp
+                                  ? {
+                                      secret_base32: cleanTotp,
+                                      algorithm: f.totp_algorithm,
+                                      digits: Number(f.totp_digits) || 6,
+                                      period_seconds: Number(f.totp_period) || 30,
+                                      issuer: null,
+                                      label: null,
+                                    }
+                                  : null,
+                              }
+                            : null,
+                        custom_fields: f.custom_fields.filter((c) => c.name.trim().length > 0),
+                        notes: f.notes,
+                      };
+                      const saved = await ipc("cmd_save_item", { input });
+                      state.editing = false;
+                      await refreshAll(saved.id);
+                    }),
+                }),
+              ]),
+            ]),
+          );
+
+          const kindSelect = el(
+            "select",
+            {
+              onChange: (e) => {
+                f.kind = e.target.value;
+                render();
+              },
+            },
+            [
+              el("option", { value: "login", text: "Identifiant de connexion" }),
+              el("option", { value: "secure_note", text: "Note sécurisée" }),
+            ],
+          );
+          kindSelect.value = f.kind;
+
+          const folderSelect = el(
+            "select",
+            {
+              onChange: (e) => {
+                f.folder_id = e.target.value;
+              },
+            },
+            [
+              el("option", { value: "", text: "Aucun dossier" }),
+              ...state.folders.map((folder) => el("option", { value: folder.id, text: folder.name })),
+            ],
+          );
+          folderSelect.value = f.folder_id || "";
+
+          card.appendChild(
+            el("div", { class: "grid-2" }, [
+              el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "Type de fiche" }), kindSelect]),
+              el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "Dossier" }), folderSelect]),
+            ]),
+          );
+
+          card.appendChild(
+            el("div", { class: "form-group" }, [
+              el("label", { class: "form-label", text: "Titre *" }),
+              el("input", {
+                type: "text",
+                value: f.title,
+                placeholder: "Ex. GitHub, Gmail, Serveur Proxmox...",
+                onInput: (e) => {
+                  f.title = e.target.value;
+                },
+              }),
+            ]),
+          );
+
+          card.appendChild(
+            el("label", { style: { display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px", cursor: "pointer" } }, [
+              el("input", {
+                type: "checkbox",
+                checked: f.favorite,
+                onChange: (e) => {
+                  f.favorite = e.target.checked;
+                },
+              }),
+              el("span", { text: "Marquer comme favori" }),
+            ]),
+          );
+
+          if (f.kind === "login") {
+            card.appendChild(
+              el("div", { class: "grid-2" }, [
+                el("div", { class: "form-group" }, [
+                  el("label", { class: "form-label", text: "Nom d'utilisateur" }),
+                  el("input", {
+                    type: "text",
+                    value: f.username,
+                    onInput: (e) => {
+                      f.username = e.target.value;
+                    },
+                  }),
+                ]),
+                el("div", { class: "form-group" }, [
+                  el("label", { class: "form-label", text: "Adresse email" }),
+                  el("input", {
+                    type: "email",
+                    value: f.email,
+                    onInput: (e) => {
+                      f.email = e.target.value;
+                    },
+                  }),
+                ]),
+              ]),
+            );
+
+            const pwField = el("input", {
+              type: "text",
+              class: "mono",
+              value: f.password,
+              onInput: (e) => {
+                f.password = e.target.value;
+              },
+            });
+            card.appendChild(
+              el("div", { class: "form-group" }, [
+                el("label", { class: "form-label", text: "Mot de passe" }),
+                el("div", { class: "sub-row", style: { gridTemplateColumns: "1fr auto" } }, [
+                  pwField,
+                  el("button", {
+                    type: "button",
+                    text: "Générer fort",
+                    onClick: () =>
+                      void runSafe(async () => {
+                        const res = await ipc("cmd_generate_password", { options: state.genOpts });
+                        f.password = res.value;
+                      }),
+                  }),
+                ]),
+              ]),
+            );
+
+            const algoSel = el(
+              "select",
+              {
+                onChange: (e) => {
+                  f.totp_algorithm = e.target.value;
+                },
+              },
+              [
+                el("option", { value: "SHA1", text: "SHA1" }),
+                el("option", { value: "SHA256", text: "SHA256" }),
+                el("option", { value: "SHA512", text: "SHA512" }),
+              ],
+            );
+            algoSel.value = f.totp_algorithm;
+
+            card.appendChild(
+              el("div", { class: "field-box" }, [
+                el("div", { class: "field-name", text: "Double authentification TOTP (Base32 ou URI otpauth://)" }),
+                el("input", {
+                  type: "text",
+                  class: "mono",
+                  value: f.totp_secret,
+                  placeholder: "JBSWY3DPEHPK3PXP ou otpauth://totp/...",
+                  onInput: (e) => {
+                    f.totp_secret = e.target.value;
+                  },
+                }),
+                el("div", { class: "grid-2", style: { marginTop: "8px" } }, [
+                  el("div", {}, [el("label", { class: "form-label", text: "Algorithme" }), algoSel]),
+                  el("div", { class: "grid-2" }, [
+                    el("div", {}, [
+                      el("label", { class: "form-label", text: "Chiffres" }),
+                      el("input", {
+                        type: "number",
+                        value: f.totp_digits,
+                        onInput: (e) => {
+                          f.totp_digits = Number(e.target.value) || 6;
+                        },
+                      }),
+                    ]),
+                    el("div", {}, [
+                      el("label", { class: "form-label", text: "Période (s)" }),
+                      el("input", {
+                        type: "number",
+                        value: f.totp_period,
+                        onInput: (e) => {
+                          f.totp_period = Number(e.target.value) || 30;
+                        },
+                      }),
+                    ]),
+                  ]),
+                ]),
+              ]),
+            );
+
+            const uriBox = el("div", { class: "field-box" }, [
+              el("div", { class: "field-row", style: { marginBottom: "8px" } }, [
+                el("span", { class: "field-name", text: "URLs associées" }),
+                el("button", {
+                  type: "button",
+                  text: "+ URL",
+                  onClick: () => {
+                    f.uris.push({ uri: "", match_mode: "base_domain" });
+                    render();
+                  },
+                }),
+              ]),
+            ]);
+            f.uris.forEach((u, idx) => {
+              const modeSel = el(
+                "select",
+                {
+                  style: { width: "145px" },
+                  onChange: (e) => {
+                    u.match_mode = e.target.value;
+                  },
+                },
+                [
+                  el("option", { value: "base_domain", text: "Domaine eTLD+1" }),
+                  el("option", { value: "host", text: "Hôte exact" }),
+                  el("option", { value: "starts_with", text: "Préfixe" }),
+                  el("option", { value: "exact", text: "Exact" }),
+                  el("option", { value: "regex", text: "Regex" }),
+                  el("option", { value: "never", text: "Jamais" }),
+                ],
+              );
+              modeSel.value = u.match_mode;
+              uriBox.appendChild(
+                el("div", { class: "sub-row" }, [
+                  el("input", {
+                    type: "url",
+                    value: u.uri,
+                    placeholder: "https://example.com",
+                    onInput: (e) => {
+                      u.uri = e.target.value;
+                    },
+                  }),
+                  modeSel,
+                  el("button", {
+                    type: "button",
+                    text: "×",
+                    onClick: () => {
+                      f.uris.splice(idx, 1);
+                      render();
+                    },
+                  }),
+                ]),
+              );
+            });
+            card.appendChild(uriBox);
+          }
+
+          const cfBox = el("div", { class: "field-box" }, [
+            el("div", { class: "field-row", style: { marginBottom: "8px" } }, [
+              el("span", { class: "field-name", text: "Champs personnalisés" }),
+              el("button", {
+                type: "button",
+                text: "+ Champ",
+                onClick: () => {
+                  f.custom_fields.push({ name: "", value: "", hidden: false });
+                  render();
+                },
+              }),
+            ]),
+          ]);
+          f.custom_fields.forEach((c, idx) => {
+            cfBox.appendChild(
+              el("div", { class: "sub-row", style: { gridTemplateColumns: "1fr 1fr auto auto" } }, [
+                el("input", {
+                  type: "text",
+                  value: c.name,
+                  placeholder: "Nom du champ",
+                  onInput: (e) => {
+                    c.name = e.target.value;
+                  },
+                }),
+                el("input", {
+                  type: "text",
+                  value: c.value,
+                  placeholder: "Valeur",
+                  onInput: (e) => {
+                    c.value = e.target.value;
+                  },
+                }),
+                el("label", { style: { display: "flex", alignItems: "center", gap: "4px", fontSize: "12px" } }, [
+                  el("input", {
+                    type: "checkbox",
+                    checked: c.hidden,
+                    onChange: (e) => {
+                      c.hidden = e.target.checked;
+                    },
+                  }),
+                  "Masqué",
+                ]),
+                el("button", {
+                  type: "button",
+                  text: "×",
+                  onClick: () => {
+                    f.custom_fields.splice(idx, 1);
+                    render();
+                  },
+                }),
+              ]),
+            );
+          });
+          card.appendChild(cfBox);
+
+          card.appendChild(
+            el("div", { class: "form-group" }, [
+              el("label", { class: "form-label", text: "Notes chiffrées" }),
+              el("textarea", {
+                rows: 4,
+                value: f.notes,
+                onInput: (e) => {
+                  f.notes = e.target.value;
+                },
+              }),
+            ]),
+          );
+
+          return card;
+        }
+
+        function renderDetail() {
+          if (state.editing && state.editForm) {
+            return renderEditor();
+          }
+          const item = state.selectedItem;
+          if (!item) {
+            return el("div", { class: "empty-state" }, [
+              makeLogoSvg(48),
+              el("h3", { text: "Aucune fiche sélectionnée" }),
+              el("p", {
+                text: "Sélectionnez une fiche dans la liste ou cliquez sur « + Nouvelle fiche » (Ctrl+N).",
+              }),
+            ]);
+          }
+
+          const card = el("div", { class: "detail-card" });
+          const avatar = el("div", {
+            class: "avatar",
+            style: { background: item.logo?.fallback_color || "#E07A2F" },
+          });
+          if (item.logo?.data_url) {
+            avatar.appendChild(el("img", { src: item.logo.data_url, alt: item.title }));
+          } else {
+            const summary = state.items.find((i) => i.id === item.id);
+            avatar.textContent = summary?.fallback_initials || item.title.slice(0, 2).toUpperCase();
+          }
+
+          const folderObj = state.folders.find((fl) => fl.id === item.folder_id);
+          const metaLine = `${item.kind === "login" ? "Connexion" : "Note sécurisée"} · v${item.item_version}${
+            folderObj ? ` · ${folderObj.name}` : ""
+          }${item.trashed_at ? " · Dans la corbeille" : ""}`;
+
+          const logoInput = el("input", {
+            type: "file",
+            accept: "image/png,image/jpeg,image/webp",
+            style: { display: "none" },
+            onChange: async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const buf = await file.arrayBuffer();
+              const bytes = Array.from(new Uint8Array(buf));
+              void runSafe(async () => {
+                const updated = await ipc("cmd_upload_item_logo", { itemId: item.id, bytes });
+                state.selectedItem = updated;
+                await refreshAll(updated.id);
+              });
+            },
+          });
+
+          card.appendChild(
+            el("div", { class: "detail-header" }, [
+              el("div", { class: "detail-identity" }, [
+                avatar,
+                el("div", {}, [
+                  el("h2", { style: { margin: "0 0 3px", fontSize: "19px" }, text: item.title }),
+                  el("div", { style: { color: "var(--text-secondary)", fontSize: "12px" }, text: metaLine }),
+                ]),
+              ]),
+              el("div", { class: "detail-actions" }, [
+                logoInput,
+                el("button", {
+                  type: "button",
+                  text: "Logo",
+                  title: "Importer un logo personnalisé",
+                  onClick: () => logoInput.click(),
+                }),
+                el("button", {
+                  type: "button",
+                  text: item.favorite ? "★ Favori" : "☆ Favori",
+                  onClick: () =>
+                    void runSafe(async () => {
+                      const input = {
+                        id: item.id,
+                        kind: item.kind,
+                        title: item.title,
+                        folder_id: item.folder_id,
+                        favorite: !item.favorite,
+                        trashed_at: item.trashed_at,
+                        login: item.login,
+                        custom_fields: item.custom_fields,
+                        notes: item.notes,
+                      };
+                      const saved = await ipc("cmd_save_item", { input });
+                      await refreshAll(saved.id);
+                    }),
+                }),
+                el("button", {
+                  type: "button",
+                  class: "primary",
+                  text: "Modifier",
+                  onClick: () => beginEdit(item),
+                }),
+                item.trashed_at
+                  ? el("button", {
+                      type: "button",
+                      text: "Restaurer",
+                      onClick: () =>
+                        void runSafe(async () => {
+                          await ipc("cmd_save_item", {
+                            input: {
+                              id: item.id,
+                              kind: item.kind,
+                              title: item.title,
+                              folder_id: item.folder_id,
+                              favorite: item.favorite,
+                              trashed_at: null,
+                              login: item.login,
+                              custom_fields: item.custom_fields,
+                              notes: item.notes,
+                            },
+                          });
+                          await refreshAll();
+                        }),
+                    })
+                  : null,
+                el("button", {
+                  type: "button",
+                  class: "danger",
+                  text: item.trashed_at ? "Supprimer définitivement" : "Corbeille",
+                  onClick: () =>
+                    void runSafe(async () => {
+                      if (item.trashed_at) {
+                        await ipc("cmd_delete_item", { id: item.id });
+                      } else {
+                        await ipc("cmd_save_item", {
+                          input: {
+                            id: item.id,
+                            kind: item.kind,
+                            title: item.title,
+                            folder_id: item.folder_id,
+                            favorite: item.favorite,
+                            trashed_at: new Date().toISOString(),
+                            login: item.login,
+                            custom_fields: item.custom_fields,
+                            notes: item.notes,
+                          },
+                        });
+                      }
+                      await refreshAll();
+                    }),
+                }),
+              ]),
+            ]),
+          );
+
+          if (item.login) {
+            if (item.login.username) {
+              card.appendChild(
+                el("div", { class: "field-box" }, [
+                  el("div", { class: "field-row" }, [
+                    el("div", {}, [
+                      el("div", { class: "field-name", text: "Nom d'utilisateur" }),
+                      el("div", { class: "field-value", text: item.login.username }),
+                    ]),
+                    el("button", {
+                      type: "button",
+                      text: "Copier",
+                      onClick: () => void copySecret("Nom d'utilisateur", item.login.username),
+                    }),
+                  ]),
+                ]),
+              );
+            }
+
+            if (item.login.email) {
+              card.appendChild(
+                el("div", { class: "field-box" }, [
+                  el("div", { class: "field-row" }, [
+                    el("div", {}, [
+                      el("div", { class: "field-name", text: "Email" }),
+                      el("div", { class: "field-value", text: item.login.email }),
+                    ]),
+                    el("button", {
+                      type: "button",
+                      text: "Copier",
+                      onClick: () => void copySecret("Email", item.login.email),
+                    }),
+                  ]),
+                ]),
+              );
+            }
+
+            const pwBox = el("div", { class: "field-box" });
+            const pwVal = item.login.password
+              ? state.revealPassword
+                ? item.login.password
+                : "•".repeat(Math.min(18, Math.max(10, item.login.password.length)))
+              : "—";
+            pwBox.appendChild(
+              el("div", { class: "field-row" }, [
+                el("div", {}, [
+                  el("div", { class: "field-name", text: "Mot de passe" }),
+                  el("div", { class: "field-value mono", text: pwVal }),
+                ]),
+                el("div", { class: "row-actions" }, [
+                  el("button", {
+                    type: "button",
+                    text: state.revealPassword ? "Masquer" : "Afficher",
+                    onClick: () => {
+                      state.revealPassword = !state.revealPassword;
+                      render();
+                    },
+                  }),
+                  el("button", {
+                    type: "button",
+                    text: "Copier",
+                    disabled: !item.login.password,
+                    onClick: () => void copySecret("Mot de passe", item.login.password),
+                  }),
+                ]),
+              ]),
+            );
+            if (state.selectedStrength && item.login.password) {
+              const st = strengthStyle(state.selectedStrength.score);
+              pwBox.appendChild(
+                el("div", { class: "strength-track" }, [
+                  el("div", { class: "strength-fill", style: { width: `${st.pct}%`, background: st.color } }),
+                ]),
+              );
+              pwBox.appendChild(
+                el("div", {
+                  style: { fontSize: "11px", color: "var(--text-secondary)", marginTop: "4px" },
+                  text: `Robustesse : ${st.label} · ~${Math.round(state.selectedStrength.entropy_bits)} bits (${state.selectedStrength.crack_time_display})`,
+                }),
+              );
+            }
+            card.appendChild(pwBox);
+
+            if (item.login.totp) {
+              card.appendChild(
+                el("div", { class: "totp-box" }, [
+                  el("div", {}, [
+                    el("div", { class: "field-name", text: "Code 2FA (TOTP)" }),
+                    el("div", {
+                      id: "live-totp-code",
+                      class: "totp-code",
+                      text: state.totp ? formatTotpCode(state.totp.code) : "••••••",
+                    }),
+                  ]),
+                  el("div", { class: "totp-ring-wrap" }, [
+                    el("span", {
+                      id: "live-totp-sec",
+                      class: "pill totp mono",
+                      text: state.totp ? `${state.totp.remaining_seconds} s` : "-- s",
+                    }),
+                    el("button", {
+                      type: "button",
+                      text: "Copier TOTP",
+                      disabled: !state.totp,
+                      onClick: () => state.totp && void copySecret("Code TOTP", state.totp.code),
+                    }),
+                  ]),
+                ]),
+              );
+            }
+
+            if (item.login.uris?.length) {
+              const uriCard = el("div", { class: "field-box" }, [el("div", { class: "field-name", text: "Sites Web" })]);
+              item.login.uris.forEach((u) => {
+                uriCard.appendChild(
+                  el("div", { class: "field-row", style: { marginTop: "6px" } }, [
+                    el("div", { class: "mono", style: { fontSize: "12.5px", wordBreak: "break-all" }, text: `${u.uri} (${u.match_mode})` }),
+                    el("button", {
+                      type: "button",
+                      text: "Ouvrir",
+                      onClick: () =>
+                        void runSafe(async () => {
+                          const safeUrl = await ipc("cmd_open_external_url", { url: u.uri });
+                          window.open(safeUrl, "_blank", "noopener,noreferrer");
+                        }),
+                    }),
+                  ]),
+                );
+              });
+              card.appendChild(uriCard);
+            }
+
+            if (item.login.password_history?.length) {
+              const histCard = el("div", { class: "field-box" }, [
+                el("div", { class: "field-name", text: `Historique des mots de passe (${item.login.password_history.length})` }),
+              ]);
+              item.login.password_history.forEach((h) => {
+                histCard.appendChild(
+                  el("div", { class: "field-row", style: { marginTop: "6px" } }, [
+                    el("span", { style: { fontSize: "12px", color: "var(--text-secondary)" }, text: h.changed_at }),
+                    el("button", {
+                      type: "button",
+                      text: "Copier l'ancien",
+                      onClick: () => void copySecret("Ancien mot de passe", h.password),
+                    }),
+                  ]),
+                );
+              });
+              card.appendChild(histCard);
+            }
+          }
+
+          if (item.custom_fields?.length) {
+            const cfCard = el("div", { class: "field-box" }, [el("div", { class: "field-name", text: "Champs personnalisés" })]);
+            item.custom_fields.forEach((c) => {
+              cfCard.appendChild(
+                el("div", { class: "field-row", style: { marginTop: "6px" } }, [
+                  el("div", {}, [
+                    el("div", { style: { fontSize: "11.5px", color: "var(--text-secondary)" }, text: c.name }),
+                    el("div", { class: c.hidden ? "mono" : "", text: c.hidden ? "••••••••" : c.value }),
+                  ]),
+                  el("button", {
+                    type: "button",
+                    text: "Copier",
+                    onClick: () => void copySecret(c.name, c.value),
+                  }),
+                ]),
+              );
+            });
+            card.appendChild(cfCard);
+          }
+
+          if (item.notes) {
+            card.appendChild(
+              el("div", { class: "field-box" }, [
+                el("div", { class: "field-name", text: "Notes" }),
+                el("div", { style: { whiteSpace: "pre-wrap" }, text: item.notes }),
+              ]),
+            );
+          }
+
+          return card;
+        }
+
+        function renderGeneratorModal() {
+          const g = state.genOpts;
+          const modal = el("div", { class: "modal" });
+          modal.appendChild(
+            el("div", { class: "modal-header" }, [
+              el("h2", { text: "Générateur de mots de passe CSPRNG" }),
+              el("button", {
+                type: "button",
+                text: "Fermer",
+                onClick: () => {
+                  state.modal = null;
+                  render();
+                },
+              }),
+            ]),
+          );
+
+          modal.appendChild(
+            el("div", { class: "tabs" }, [
+              el("button", {
+                type: "button",
+                class: g.mode === "random" ? "active" : "",
+                text: "Aléatoire",
+                onClick: () => {
+                  g.mode = "random";
+                  void generatePreview();
+                },
+              }),
+              el("button", {
+                type: "button",
+                class: g.mode === "passphrase" ? "active" : "",
+                text: "Phrase secrète EFF",
+                onClick: () => {
+                  g.mode = "passphrase";
+                  void generatePreview();
+                },
+              }),
+            ]),
+          );
+
+          if (state.genResult) {
+            const st = strengthStyle(state.genResult.strength.score);
+            modal.appendChild(
+              el("div", { class: "field-box" }, [
+                el("div", { class: "field-row" }, [
+                  el("div", { class: "mono", style: { fontSize: "15px", wordBreak: "break-all" }, text: state.genResult.value }),
+                  el("button", {
+                    type: "button",
+                    class: "primary",
+                    text: "Copier",
+                    onClick: () => void copySecret("Mot de passe généré", state.genResult.value),
+                  }),
+                ]),
+                el("div", { class: "strength-track" }, [
+                  el("div", { class: "strength-fill", style: { width: `${st.pct}%`, background: st.color } }),
+                ]),
+                el("div", {
+                  style: { fontSize: "11.5px", color: "var(--text-secondary)", marginTop: "4px" },
+                  text: `${st.label} · ~${Math.round(state.genResult.strength.entropy_bits)} bits`,
+                }),
+              ]),
+            );
+          }
+
+          if (g.mode === "random") {
+            modal.appendChild(
+              el("div", { class: "form-group" }, [
+                el("label", { class: "form-label", text: `Longueur : ${g.length} caractères` }),
+                el("input", {
+                  type: "range",
+                  min: 8,
+                  max: 64,
+                  value: g.length,
+                  onInput: (e) => {
+                    g.length = Number(e.target.value);
+                    void generatePreview();
+                  },
+                }),
+              ]),
+            );
+            const toggles = [
+              ["uppercase", "Majuscules (A-Z)"],
+              ["lowercase", "Minuscules (a-z)"],
+              ["digits", "Chiffres (0-9)"],
+              ["symbols", "Symboles (!@#$...)"],
+              ["exclude_ambiguous", "Exclure ambigus (0/O, 1/l/I)"],
+            ];
+            toggles.forEach(([key, label]) => {
+              modal.appendChild(
+                el("label", { style: { display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" } }, [
+                  el("input", {
+                    type: "checkbox",
+                    checked: g[key],
+                    onChange: (e) => {
+                      g[key] = e.target.checked;
+                      void generatePreview();
+                    },
+                  }),
+                  label,
+                ]),
+              );
+            });
+          } else {
+            modal.appendChild(
+              el("div", { class: "form-group" }, [
+                el("label", { class: "form-label", text: `Nombre de mots : ${g.word_count}` }),
+                el("input", {
+                  type: "range",
+                  min: 3,
+                  max: 10,
+                  value: g.word_count,
+                  onInput: (e) => {
+                    g.word_count = Number(e.target.value);
+                    void generatePreview();
+                  },
+                }),
+              ]),
+            );
+            modal.appendChild(
+              el("div", { class: "form-group" }, [
+                el("label", { class: "form-label", text: "Séparateur" }),
+                el("input", {
+                  type: "text",
+                  value: g.separator,
+                  onInput: (e) => {
+                    g.separator = e.target.value || "-";
+                    void generatePreview();
+                  },
+                }),
+              ]),
+            );
+          }
+
+          modal.appendChild(
+            el("button", {
+              type: "button",
+              class: "primary",
+              style: { width: "100%", marginTop: "10px" },
+              text: "Régénérer",
+              onClick: () => void generatePreview(),
+            }),
+          );
+
+          return el("div", { class: "modal-backdrop" }, [modal]);
+        }
+
+        async function generatePreview() {
+          state.genResult = await ipc("cmd_generate_password", { options: state.genOpts });
+          render();
+        }
+
+        function renderImportExportModal() {
+          const modal = el("div", { class: "modal" });
+          modal.appendChild(
+            el("div", { class: "modal-header" }, [
+              el("h2", { text: "Import / Export du coffre" }),
+              el("button", {
+                type: "button",
+                text: "Fermer",
+                onClick: () => {
+                  state.modal = null;
+                  state.importPreview = null;
+                  render();
+                },
+              }),
+            ]),
+          );
+
+          const fmtSel = el(
+            "select",
+            {},
+            IMPORT_FORMATS.map(([val, label]) => el("option", { value: val, text: label })),
+          );
+          const backupPwInput = el("input", { type: "password", placeholder: "Requis pour JSON chiffré" });
+          const fileInput = el("input", { type: "file" });
+
+          const importBox = el("div", { class: "field-box" }, [
+            el("h3", { style: { margin: "0 0 10px", fontSize: "14px" }, text: "Importer depuis un autre gestionnaire" }),
+            el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "Format source" }), fmtSel]),
+            el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "Fichier d'export" }), fileInput]),
+            el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "Mot de passe du fichier (optionnel)" }), backupPwInput]),
+            el("button", {
+              type: "button",
+              class: "primary",
+              text: "Analyser avant import (Dry-Run)",
+              onClick: async () => {
+                const file = fileInput.files?.[0];
+                if (!file) {
+                  state.error = "Sélectionnez d'abord un fichier à importer.";
+                  render();
+                  return;
+                }
+                const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
+                await runSafe(async () => {
+                  state.importPreview = await ipc("cmd_preview_import", {
+                    format: fmtSel.value,
+                    bytes,
+                    backupPassword: backupPwInput.value || null,
+                  });
+                });
+              },
+            }),
+          ]);
+
+          if (state.importPreview) {
+            const p = state.importPreview;
+            const polSel = el("select", {}, [
+              el("option", { value: "skip", text: "Ignorer les doublons" }),
+              el("option", { value: "merge", text: "Fusionner les doublons" }),
+              el("option", { value: "create_new", text: "Tout importer en nouvelles fiches" }),
+            ]);
+            importBox.appendChild(
+              el("div", { style: { marginTop: "12px", paddingTop: "12px", borderTop: "1px solid var(--border-subtle)" } }, [
+                el("div", {
+                  text: `Aperçu : ${p.total_items} fiches, ${p.folder_count} dossiers, ${p.totp_count} TOTP, ${p.duplicates.length} doublon(s) détecté(s).`,
+                }),
+                el("div", { class: "form-group", style: { marginTop: "8px" } }, [el("label", { class: "form-label", text: "Gestion des doublons" }), polSel]),
+                el("button", {
+                  type: "button",
+                  class: "primary",
+                  text: "Confirmer l'import",
+                  onClick: () =>
+                    void runSafe(async () => {
+                      const rep = await ipc("cmd_execute_import", { previewId: p.preview_id, policy: polSel.value });
+                      state.importPreview = null;
+                      state.modal = null;
+                      state.error = null;
+                      await refreshAll();
+                      state.toast = {
+                        label: `Import terminé : ${rep.created} créées, ${rep.merged} fusionnées`,
+                        clear_after_seconds: 8,
+                        expires_at_ms: Date.now() + 8000,
+                      };
+                    }),
+                }),
+              ]),
+            );
+          }
+
+          modal.appendChild(importBox);
+
+          const expFmt = el("select", {}, [
+            el("option", { value: "anvil", text: "Archive chiffrée (.anvil)" }),
+            el("option", { value: "bitwarden_json", text: "Bitwarden JSON (clair)" }),
+            el("option", { value: "csv", text: "CSV standard (clair)" }),
+          ]);
+          const expMasterPw = el("input", { type: "password", placeholder: "Master Password requis" });
+          const expArchivePw = el("input", { type: "password", placeholder: "Mot de passe archive (.anvil)" });
+
+          modal.appendChild(
+            el("div", { class: "field-box" }, [
+              el("h3", { style: { margin: "0 0 10px", fontSize: "14px" }, text: "Exporter le coffre" }),
+              el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "Format" }), expFmt]),
+              el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "Confirmation Master Password" }), expMasterPw]),
+              el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "Mot de passe archive (pour .anvil)" }), expArchivePw]),
+              el("button", {
+                type: "button",
+                text: "Télécharger l'export",
+                onClick: () =>
+                  void runSafe(async () => {
+                    const bytes = await ipc("cmd_export_vault", {
+                      format: expFmt.value,
+                      masterPassword: expMasterPw.value,
+                      backupPassword: expArchivePw.value || null,
+                    });
+                    expMasterPw.value = "";
+                    const ext = expFmt.value === "anvil" ? "anvil" : expFmt.value === "csv" ? "csv" : "json";
+                    const blob = new Blob([new Uint8Array(bytes)], { type: "application/octet-stream" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `anvil-vault.${ext}`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }),
+              }),
+            ]),
+          );
+
+          return el("div", { class: "modal-backdrop" }, [modal]);
+        }
+
+        function renderConflictsModal() {
+          const modal = el("div", { class: "modal" });
+          modal.appendChild(
+            el("div", { class: "modal-header" }, [
+              el("h2", { text: `Résolution des conflits (${state.conflicts.length})` }),
+              el("button", {
+                type: "button",
+                text: "Fermer",
+                onClick: () => {
+                  state.modal = null;
+                  render();
+                },
+              }),
+            ]),
+          );
+          if (!state.conflicts.length) {
+            modal.appendChild(el("p", { text: "Aucun conflit en attente." }));
+          } else {
+            state.conflicts.forEach((c) => {
+              modal.appendChild(
+                el("div", { class: "field-box" }, [
+                  el("div", { style: { fontWeight: 600, marginBottom: "6px" }, text: c.title }),
+                  el("div", { style: { fontSize: "12px", color: "var(--text-secondary)" }, text: `Local : ${c.local_summary}` }),
+                  el("div", { style: { fontSize: "12px", color: "var(--text-secondary)", marginBottom: "8px" }, text: `Serveur : ${c.server_summary}` }),
+                  el("div", { class: "row-actions" }, [
+                    el("button", {
+                      type: "button",
+                      text: "Garder local",
+                      onClick: () =>
+                        void runSafe(async () => {
+                          await ipc("cmd_resolve_conflict", { conflictId: c.conflict_id, resolution: "keep_local" });
+                          await refreshAll();
+                        }),
+                    }),
+                    el("button", {
+                      type: "button",
+                      text: "Garder serveur",
+                      onClick: () =>
+                        void runSafe(async () => {
+                          await ipc("cmd_resolve_conflict", { conflictId: c.conflict_id, resolution: "keep_server" });
+                          await refreshAll();
+                        }),
+                    }),
+                    el("button", {
+                      type: "button",
+                      text: "Dupliquer",
+                      onClick: () =>
+                        void runSafe(async () => {
+                          await ipc("cmd_resolve_conflict", { conflictId: c.conflict_id, resolution: "duplicate_both" });
+                          await refreshAll();
+                        }),
+                    }),
+                  ]),
+                ]),
+              );
+            });
+          }
+          return el("div", { class: "modal-backdrop" }, [modal]);
+        }
+
+        function renderWorkspace() {
+          const sidebar = el("aside", { class: "sidebar" });
+
+          const filters = [
+            ["all", "Toutes les fiches"],
+            ["favorites", "Favoris"],
+            ["totp", "Codes 2FA (TOTP)"],
+            ["trash", "Corbeille"],
+          ];
+          filters.forEach(([kind, label]) => {
+            sidebar.appendChild(
+              el("button", {
+                type: "button",
+                class: `nav-btn ${state.navFilter.kind === kind ? "active" : ""}`,
+                text: label,
+                onClick: () => {
+                  state.navFilter = { kind, folderId: null };
+                  void runSafe(refreshAll);
+                },
+              }),
+            );
+          });
+
+          sidebar.appendChild(
+            el("div", { class: "nav-section-title" }, [
+              el("span", { text: "Dossiers" }),
+              el("button", {
+                type: "button",
+                class: "ghost",
+                style: { padding: "2px 6px" },
+                text: "+",
+                onClick: () => {
+                  state.showAddFolder = !state.showAddFolder;
+                  render();
+                },
+              }),
+            ]),
+          );
+
+          if (state.showAddFolder) {
+            const folderInput = el("input", { type: "text", placeholder: "Nom du dossier" });
+            sidebar.appendChild(
+              el("form", {
+                style: { display: "flex", gap: "6px", marginBottom: "8px" },
+                onSubmit: (e) => {
+                  e.preventDefault();
+                  const name = folderInput.value.trim();
+                  if (!name) return;
+                  void runSafe(async () => {
+                    await ipc("cmd_save_folder", { id: null, name });
+                    state.showAddFolder = false;
+                    await refreshAll();
+                  });
+                },
+              }, [folderInput, el("button", { type: "submit", class: "primary", text: "OK" })]),
+            );
+          }
+
+          state.folders.forEach((folder) => {
+            const active = state.navFilter.kind === "folder" && state.navFilter.folderId === folder.id;
+            sidebar.appendChild(
+              el("div", { class: "folder-row" }, [
+                el("button", {
+                  type: "button",
+                  class: `nav-btn ${active ? "active" : ""}`,
+                  text: folder.name,
+                  onClick: () => {
+                    state.navFilter = { kind: "folder", folderId: folder.id };
+                    void runSafe(refreshAll);
+                  },
+                }),
+                el("button", {
+                  type: "button",
+                  class: "ghost folder-del",
+                  text: "×",
+                  title: "Supprimer ce dossier",
+                  onClick: () =>
+                    void runSafe(async () => {
+                      await ipc("cmd_delete_folder", { id: folder.id });
+                      if (state.navFilter.folderId === folder.id) {
+                        state.navFilter = { kind: "all", folderId: null };
+                      }
+                      await refreshAll();
+                    }),
+                }),
+              ]),
+            );
+          });
+
+          const footer = el("div", { class: "sidebar-footer" }, [
+            el("div", { style: { fontWeight: 600, color: "var(--text-primary)" }, text: state.status.email || "Hors-ligne" }),
+            el("div", { style: { fontSize: "11px", marginBottom: "8px" }, text: `Synchro r${state.status.sync_revision}` }),
+          ]);
+
+          if (state.status.biometric_available && !state.status.biometric_enabled) {
+            if (!state.showBiometricPrompt) {
+              footer.appendChild(
+                el("button", {
+                  type: "button",
+                  style: { width: "100%", fontSize: "12px" },
+                  text: "Activer Windows DPAPI",
+                  onClick: () => {
+                    state.showBiometricPrompt = true;
+                    render();
+                  },
+                }),
+              );
+            } else {
+              const bioPw = el("input", { type: "password", placeholder: "Confirmez Master Password" });
+              footer.appendChild(
+                el("form", {
+                  onSubmit: (e) => {
+                    e.preventDefault();
+                    const pw = bioPw.value;
+                    bioPw.value = "";
+                    if (!pw) return;
+                    void runSafe(async () => {
+                      await ipc("cmd_enable_biometric", { masterPassword: pw });
+                      state.showBiometricPrompt = false;
+                      await refreshAll();
+                    });
+                  },
+                }, [
+                  bioPw,
+                  el("div", { class: "row-actions", style: { marginTop: "6px" } }, [
+                    el("button", { type: "submit", class: "primary", style: { flex: 1 }, text: "Activer" }),
+                    el("button", {
+                      type: "button",
+                      text: "Annuler",
+                      onClick: () => {
+                        state.showBiometricPrompt = false;
+                        render();
+                      },
+                    }),
+                  ]),
+                ]),
+              );
+            }
+          }
+          sidebar.appendChild(footer);
+
+          const listPane = el("section", { class: "list-pane" });
+          if (!state.items.length) {
+            listPane.appendChild(
+              el("div", { class: "empty-state", text: state.searchQuery ? "Aucun résultat." : "Coffre vide." }),
+            );
+          } else {
+            state.items.forEach((item) => {
+              const active = item.id === state.selectedItemId && !state.editing;
+              const av = el("div", { class: "avatar", style: { background: item.fallback_color || "#E07A2F" }, text: item.fallback_initials });
+              listPane.appendChild(
+                el("button", {
+                  type: "button",
+                  class: `item-row ${active ? "active" : ""}`,
+                  onClick: () => void runSafe(() => selectItem(item.id)),
+                }, [
+                  av,
+                  el("div", { class: "item-meta" }, [
+                    el("div", { class: "item-title", text: `${item.favorite ? "★ " : ""}${item.title}` }),
+                    el("div", { class: "item-sub", text: item.subtitle || "—" }),
+                  ]),
+                  item.has_totp ? el("span", { class: "pill totp", text: "2FA" }) : null,
+                ]),
+              );
+            });
+          }
+
+          const detailPane = el("main", { class: "detail-pane" }, [renderDetail()]);
+          return el("div", { class: "workspace" }, [sidebar, listPane, detailPane]);
+        }
+
+        function render() {
+          const root = document.getElementById("app");
+          if (!root) return;
+          const activeEl = document.activeElement;
+          const wasSearchFocused = activeEl && activeEl.id === "global-search";
+          const searchSelStart = wasSearchFocused ? activeEl.selectionStart : null;
+          root.replaceChildren();
+
+          const searchInput = el("input", {
+            id: "global-search",
+            type: "search",
+            value: state.searchQuery,
+            placeholder: "Rechercher dans le coffre...",
+            disabled: !state.status.unlocked,
+            onInput: (e) => {
+              state.searchQuery = e.target.value;
+              if (state.status.unlocked) {
+                void refreshAll().then(render);
+              }
+            },
+          });
+
+          const topbar = el("header", { class: "topbar" }, [
+            el("div", { class: "brand" }, [
+              makeLogoSvg(24),
+              el("span", { text: "Anvil" }),
+              el("span", { class: "brand-tag", text: "Zero-Knowledge" }),
+            ]),
+            state.status.unlocked
+              ? el("div", { class: "search-wrap" }, [searchInput, el("span", { class: "kbd-hint", text: "Ctrl+K" })])
+              : el("div", { style: { flex: 1 } }),
+            state.status.unlocked
+              ? el("div", { class: "topbar-actions" }, [
+                  el("button", {
+                    type: "button",
+                    class: "primary",
+                    text: "+ Nouvelle fiche",
+                    onClick: () => beginEdit(null),
+                  }),
+                  el("button", {
+                    type: "button",
+                    text: "Générateur",
+                    onClick: () => {
+                      state.modal = "generator";
+                      void generatePreview();
+                    },
+                  }),
+                  el("button", {
+                    type: "button",
+                    text: "Import / Export",
+                    onClick: () => {
+                      state.modal = "import";
+                      render();
+                    },
+                  }),
+                  state.status.pending_conflicts > 0
+                    ? el("button", {
+                        type: "button",
+                        class: "danger",
+                        text: `Conflits (${state.status.pending_conflicts})`,
+                        onClick: () => {
+                          state.modal = "conflicts";
+                          render();
+                        },
+                      })
+                    : null,
+                  el("button", {
+                    type: "button",
+                    disabled: state.syncing || state.busy,
+                    text: state.syncing ? "Synchro..." : `Synchroniser (r${state.status.sync_revision})`,
+                    onClick: () =>
+                      void runSafe(async () => {
+                        state.syncing = true;
+                        render();
+                        try {
+                          await ipc("cmd_sync");
+                          await refreshAll();
+                        } finally {
+                          state.syncing = false;
+                        }
+                      }),
+                  }),
+                  el("button", {
+                    type: "button",
+                    text: "Verrouiller",
+                    onClick: () =>
+                      void runSafe(async () => {
+                        await ipc("cmd_lock");
+                        await refreshAll();
+                      }),
+                  }),
+                ])
+              : null,
+          ]);
+          root.appendChild(topbar);
+
+          if (state.error) {
+            root.appendChild(
+              el("div", { class: "error-banner" }, [
+                el("span", { text: state.error }),
+                el("button", {
+                  type: "button",
+                  class: "ghost",
+                  text: "Fermer",
+                  onClick: () => {
+                    state.error = null;
+                    render();
+                  },
+                }),
+              ]),
+            );
+          }
+
+          root.appendChild(state.status.unlocked ? renderWorkspace() : renderUnlockScreen());
+
+          if (state.modal === "generator") root.appendChild(renderGeneratorModal());
+          if (state.modal === "import") root.appendChild(renderImportExportModal());
+          if (state.modal === "conflicts") root.appendChild(renderConflictsModal());
+
+          if (state.toast) {
+            const rem = Math.max(0, Math.ceil((state.toast.expires_at_ms - Date.now()) / 1000));
+            root.appendChild(
+              el("div", { class: "toast" }, [
+                el("div", { class: "field-row" }, [
+                  el("span", { style: { fontWeight: 600 }, text: `${state.toast.label} copié` }),
+                  el("span", { id: "clipboard-toast-sec", class: "mono", style: { color: "var(--accent-copper)" }, text: `${rem} s` }),
+                ]),
+                el("div", { style: { fontSize: "11.5px", color: "var(--text-secondary)", marginTop: "3px" }, text: "Nettoyage automatique du presse-papiers actif." }),
+              ]),
+            );
+          }
+
+          if (wasSearchFocused) {
+            const restored = document.getElementById("global-search");
+            if (restored) {
+              restored.focus();
+              if (typeof searchSelStart === "number") {
+                restored.setSelectionRange(searchSelStart, searchSelStart);
+              }
+            }
+          }
+        }
+
+        window.addEventListener("keydown", (e) => {
+          if (e.ctrlKey && e.key.toLowerCase() === "k") {
+            e.preventDefault();
+            document.getElementById("global-search")?.focus();
+          } else if (e.ctrlKey && e.key.toLowerCase() === "n" && state.status.unlocked) {
+            e.preventDefault();
+            beginEdit(null);
+          } else if (e.ctrlKey && e.key.toLowerCase() === "l" && state.status.unlocked) {
+            e.preventDefault();
+            void runSafe(async () => {
+              await ipc("cmd_lock");
+              await refreshAll();
+            });
+          } else if (e.key === "Escape") {
+            if (state.modal) {
+              state.modal = null;
+              render();
+            } else if (state.editing) {
+              state.editing = false;
+              render();
+            }
+          }
+        });
+
+        startToastCountdown();
+        startTotpLoop();
+        void runSafe(refreshAll);
+      })();
+    </script>
+  </body>
+</html>

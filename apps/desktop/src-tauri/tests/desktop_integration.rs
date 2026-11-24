@@ -481,3 +481,176 @@ async fn http_bridge_enforces_token_loopback_and_dispatches_ipc()
 
     Ok(())
 }
+
+#[tokio::test]
+async fn embedded_server_and_ui_bridge_support_full_standalone_flow()
+-> Result<(), Box<dyn std::error::Error>> {
+    use anvil_desktop::biometric::MemoryBiometricProvider;
+    use anvil_desktop::embedded_server::start_embedded_server;
+    use anvil_desktop::http_bridge::{BRIDGE_TOKEN_HEADER, build_embedded_ui_router};
+    use axum::body::Body;
+    use http::{Method, Request, StatusCode, header};
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+
+    let dir = tempfile::tempdir()?;
+    let server = start_embedded_server(dir.path(), 0).await?;
+
+    let cache = EncryptedLocalCache::connect(&sqlite_url(&dir.path().join("client.db"))).await?;
+    let host = Arc::new(DesktopCommandHost::new(
+        cache,
+        &server.url,
+        Arc::new(SecureClipboardManager::new(Arc::new(
+            MemoryClipboardBackend::new(),
+        ))),
+        Arc::new(MemoryBiometricProvider::available()),
+        Arc::new(SystemTrayController::default()),
+        Arc::new(OsSessionLockMonitor::new()),
+    )?);
+
+    let token = "fedcba9876543210fedcba9876543210".to_owned();
+    let router = build_embedded_ui_router(
+        host,
+        token.clone(),
+        server.url.clone(),
+        include_str!("../assets/desktop_app.html"),
+    )?;
+
+    let html_resp = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/")
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(html_resp.status(), StatusCode::OK);
+    assert_eq!(
+        html_resp
+            .headers()
+            .get(header::CACHE_CONTROL)
+            .and_then(|v| v.to_str().ok()),
+        Some("no-store")
+    );
+    let html_body = String::from_utf8(html_resp.into_body().collect().await?.to_bytes().to_vec())?;
+    assert!(html_body.contains("<title>Anvil</title>"));
+    assert!(html_body.contains("http:\\u002f\\u002f127.0.0.1:"));
+
+    let send_ipc = |cmd: &str, payload: serde_json::Value| {
+        let app = router.clone();
+        let tok = token.clone();
+        let body = serde_json::json!({ "command": cmd, "payload": payload }).to_string();
+        async move {
+            let resp = app
+                .oneshot(
+                    Request::builder()
+                        .method(Method::POST)
+                        .uri("/api/desktop-ipc")
+                        .header(header::CONTENT_TYPE, "application/json")
+                        .header(BRIDGE_TOKEN_HEADER, &tok)
+                        .body(Body::from(body))?,
+                )
+                .await?;
+            let status = resp.status();
+            let bytes = resp.into_body().collect().await?.to_bytes();
+            let parsed: serde_json::Value = serde_json::from_slice(&bytes)?;
+            Ok::<_, Box<dyn std::error::Error>>((status, parsed))
+        }
+    };
+
+    let (st, res) = send_ipc("cmd_status", serde_json::json!({})).await?;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(res["data"]["configured"], false);
+
+    let (st, res) = send_ipc(
+        "cmd_register",
+        serde_json::json!({
+            "serverUrl": server.url,
+            "email": "standalone@example.com",
+            "masterPassword": "ForgeMaster#2026!",
+            "inviteToken": null
+        }),
+    )
+    .await?;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(res["data"]["configured"], true);
+    assert_eq!(res["data"]["unlocked"], true);
+
+    let (st, res) = send_ipc(
+        "cmd_save_item",
+        serde_json::json!({
+            "input": {
+                "id": null,
+                "kind": "login",
+                "title": "Forge Console",
+                "folder_id": null,
+                "favorite": true,
+                "trashed_at": null,
+                "login": {
+                    "username": "admin",
+                    "email": "standalone@example.com",
+                    "password": "VaultItem#Password99!",
+                    "password_history": [],
+                    "uris": [{ "uri": "https://forge.example.com", "match_mode": "base_domain" }],
+                    "totp": {
+                        "secret_base32": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+                        "algorithm": "SHA1",
+                        "digits": 6,
+                        "period_seconds": 30,
+                        "issuer": null,
+                        "label": null
+                    }
+                },
+                "custom_fields": [{ "name": "PIN", "value": "9421", "hidden": true }],
+                "notes": "Standalone desktop note"
+            }
+        }),
+    )
+    .await?;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(res["data"]["title"], "Forge Console");
+
+    let (st, totp_res) = send_ipc(
+        "cmd_generate_totp",
+        serde_json::json!({
+            "secretOrUri": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+            "unixTimestampSeconds": 59
+        }),
+    )
+    .await?;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(totp_res["data"]["code"], "287082");
+
+    let (st, sync_res) = send_ipc("cmd_sync", serde_json::json!({})).await?;
+    assert_eq!(st, StatusCode::OK);
+    assert!(sync_res["data"]["current_revision"].as_i64().unwrap_or(0) >= 1);
+
+    let (st, lock_res) = send_ipc("cmd_lock", serde_json::json!({})).await?;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(lock_res["data"]["unlocked"], false);
+
+    let (st, unlock_res) = send_ipc(
+        "cmd_unlock_password",
+        serde_json::json!({ "masterPassword": "ForgeMaster#2026!" }),
+    )
+    .await?;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(unlock_res["data"]["unlocked"], true);
+
+    let (st, list_res) = send_ipc(
+        "cmd_list_items",
+        serde_json::json!({
+            "query": "Forge",
+            "folderId": null,
+            "favoritesOnly": false,
+            "trashedOnly": false
+        }),
+    )
+    .await?;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(list_res["data"].as_array().map(|a| a.len()), Some(1));
+
+    server.shutdown().await;
+    Ok(())
+}

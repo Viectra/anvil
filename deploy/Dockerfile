@@ -16,6 +16,7 @@ COPY crates/anvil-server/migrations crates/anvil-server/migrations
 COPY crates/anvil-client-core/src crates/anvil-client-core/src
 COPY crates/anvil-wasm/src crates/anvil-wasm/src
 COPY apps/desktop/src-tauri/src apps/desktop/src-tauri/src
+COPY apps/desktop/src-tauri/assets apps/desktop/src-tauri/assets
 COPY apps/mobile/src-tauri/src apps/mobile/src-tauri/src
 RUN cargo chef prepare --recipe-path recipe.json
 
@@ -32,6 +33,7 @@ COPY crates/anvil-wasm/Cargo.toml crates/anvil-wasm/Cargo.toml
 COPY crates/anvil-wasm/src crates/anvil-wasm/src
 COPY apps/desktop/src-tauri/Cargo.toml apps/desktop/src-tauri/Cargo.toml
 COPY apps/desktop/src-tauri/src apps/desktop/src-tauri/src
+COPY apps/desktop/src-tauri/assets apps/desktop/src-tauri/assets
 COPY apps/mobile/src-tauri/Cargo.toml apps/mobile/src-tauri/Cargo.toml
 COPY apps/mobile/src-tauri/src apps/mobile/src-tauri/src
 RUN cargo build --release --locked --bin anvil-server && mkdir -p /data && chmod 700 /data

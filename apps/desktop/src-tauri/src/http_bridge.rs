@@ -14,6 +14,8 @@ use serde::Deserialize;
 use subtle::ConstantTimeEq;
 use thiserror::Error;
 use tokio::net::TcpListener;
+use tokio::sync::oneshot;
+use tokio::task::JoinHandle;
 use zeroize::Zeroizing;
 
 use crate::commands::DesktopCommandHost;
@@ -154,4 +156,110 @@ pub async fn serve_http_bridge(
     let _ = host.cmd_lock().await;
     serve_result?;
     Ok(())
+}
+
+/// Running handle for the embedded local Desktop UI HTTP bridge.
+pub struct EmbeddedBridgeHandle {
+    pub url: String,
+    host: Arc<DesktopCommandHost>,
+    shutdown_tx: Option<oneshot::Sender<()>>,
+    task: JoinHandle<()>,
+}
+
+impl EmbeddedBridgeHandle {
+    /// Gracefully stops the local UI HTTP bridge and locks volatile vault memory.
+    pub async fn shutdown(mut self) {
+        if let Some(tx) = self.shutdown_tx.take() {
+            let _ = tx.send(());
+        }
+        let _ = self.task.await;
+        let _ = self.host.cmd_lock().await;
+    }
+}
+
+fn escape_inline_script_json(raw_json: &str) -> String {
+    raw_json
+        .replace('<', "\\u003c")
+        .replace('>', "\\u003e")
+        .replace('/', "\\u002f")
+}
+
+/// Builds a loopback Axum router serving both the embedded HTML UI and authenticated Desktop IPC.
+pub fn build_embedded_ui_router(
+    host: Arc<DesktopCommandHost>,
+    token: String,
+    default_server_url: String,
+    ui_html: &'static str,
+) -> Result<Router, HttpBridgeError> {
+    let api_router = build_bridge_router(host, token.clone())?;
+
+    let token_json = serde_json::to_string(&token).unwrap_or_else(|_| "\"\"".to_owned());
+    let server_url_json =
+        serde_json::to_string(&default_server_url).unwrap_or_else(|_| "\"\"".to_owned());
+
+    let rendered = Arc::new(
+        ui_html
+            .replace(
+                "__ANVIL_BOOTSTRAP_TOKEN__",
+                &escape_inline_script_json(&token_json),
+            )
+            .replace(
+                "__ANVIL_DEFAULT_SERVER_URL__",
+                &escape_inline_script_json(&server_url_json),
+            ),
+    );
+
+    let index_handler = {
+        let html = Arc::clone(&rendered);
+        move || {
+            let body = (*html).clone();
+            async move {
+                (
+                    StatusCode::OK,
+                    [
+                        (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+                        (header::CACHE_CONTROL, "no-store"),
+                        (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+                        (header::X_FRAME_OPTIONS, "DENY"),
+                        (
+                            header::CONTENT_SECURITY_POLICY,
+                            "default-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'",
+                        ),
+                    ],
+                    body,
+                )
+                    .into_response()
+            }
+        }
+    };
+
+    Ok(api_router.route("/", get(index_handler)))
+}
+
+/// Binds the embedded Desktop UI + IPC server to an ephemeral loopback port.
+pub async fn spawn_embedded_ui_bridge(
+    host: Arc<DesktopCommandHost>,
+    token: String,
+    default_server_url: String,
+    ui_html: &'static str,
+) -> Result<EmbeddedBridgeHandle, HttpBridgeError> {
+    let router = build_embedded_ui_router(Arc::clone(&host), token, default_server_url, ui_html)?;
+    let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0))).await?;
+    let local_addr = listener.local_addr()?;
+    let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+
+    let task = tokio::spawn(async move {
+        let _ = axum::serve(listener, router)
+            .with_graceful_shutdown(async {
+                let _ = shutdown_rx.await;
+            })
+            .await;
+    });
+
+    Ok(EmbeddedBridgeHandle {
+        url: format!("http://127.0.0.1:{}", local_addr.port()),
+        host,
+        shutdown_tx: Some(shutdown_tx),
+        task,
+    })
 }
