@@ -25,7 +25,7 @@ Anvil centralizes all security-critical logic—key derivation, authenticated en
 
 ```text
 apps/
-  desktop/             Anvil Desktop shell (Svelte 5 + TypeScript) and Win32/Tauri backend (`anvil-desktop`)
+  desktop/             Anvil Desktop shell (Svelte 5 + TypeScript) and standalone/IPC backend (`anvil`, `anvil-desktop`)
   extension/           Browser extension (Manifest V3 for Chromium & Firefox) with closed Shadow DOM autofill
   mobile/              Anvil Mobile touch UI (Svelte 5 + Tauri v2), QR onboarding/TOTP, and Android/iOS Autofill
 crates/
@@ -81,6 +81,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo check -p anvil-core --target wasm32-unknown-unknown --no-default-features
 cargo build -p anvil-wasm --target wasm32-unknown-unknown
+cargo build --release -p anvil-desktop --bin anvil
 pnpm --filter @anvil/ui check
 pnpm --filter @anvil/desktop check
 pnpm --filter @anvil/extension check

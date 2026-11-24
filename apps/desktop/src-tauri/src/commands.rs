@@ -688,42 +688,69 @@ impl DesktopCommandHost {
             None => None,
         };
 
-        let login = input.login.map(|in_login| {
-            let mut history = in_login.password_history;
-            if let Some(prev_pw) = existing
-                .as_ref()
-                .and_then(|ex| ex.login.as_ref())
-                .map(|ex_l| ex_l.password.as_str())
-                .filter(|pw| !pw.is_empty() && *pw != in_login.password)
-            {
-                let already_recorded = history.iter().any(|h| h.password == prev_pw);
-                if !already_recorded {
-                    history.insert(
-                        0,
-                        PasswordHistoryEntry {
-                            password: prev_pw.to_owned(),
-                            changed_at: now,
-                        },
-                    );
+        let login = match input.login {
+            Some(in_login) => {
+                let normalized_totp = match in_login.totp {
+                    Some(t) if !t.secret_base32.trim().is_empty() => {
+                        let raw = t.secret_base32.trim();
+                        if raw
+                            .get(..10)
+                            .is_some_and(|p| p.eq_ignore_ascii_case("otpauth://"))
+                        {
+                            Some(TotpConfig::from_otpauth_uri(raw)?)
+                        } else {
+                            let mut parsed = TotpConfig::from_input(raw)?;
+                            parsed.algorithm = t.algorithm;
+                            parsed.digits = t.digits;
+                            parsed.period_seconds = t.period_seconds;
+                            if let Some(ref issuer) = t.issuer {
+                                parsed.issuer = Some(issuer.clone());
+                            }
+                            if let Some(ref label) = t.label {
+                                parsed.label = Some(label.clone());
+                            }
+                            Some(parsed)
+                        }
+                    }
+                    _ => None,
+                };
+                let mut history = in_login.password_history;
+                if let Some(prev_pw) = existing
+                    .as_ref()
+                    .and_then(|ex| ex.login.as_ref())
+                    .map(|ex_l| ex_l.password.as_str())
+                    .filter(|pw| !pw.is_empty() && *pw != in_login.password)
+                {
+                    let already_recorded = history.iter().any(|h| h.password == prev_pw);
+                    if !already_recorded {
+                        history.insert(
+                            0,
+                            PasswordHistoryEntry {
+                                password: prev_pw.to_owned(),
+                                changed_at: now,
+                            },
+                        );
+                    }
                 }
+                Some(LoginData {
+                    username: in_login.username,
+                    email: in_login.email,
+                    password: in_login.password,
+                    password_history: history,
+                    uris: in_login
+                        .uris
+                        .into_iter()
+                        .filter(|u| !u.uri.trim().is_empty())
+                        .map(|u| ItemUri {
+                            uri: u.uri.trim().to_owned(),
+                            match_mode: u.match_mode,
+                        })
+                        .collect(),
+                    totp: normalized_totp,
+                })
             }
-            LoginData {
-                username: in_login.username,
-                email: in_login.email,
-                password: in_login.password,
-                password_history: history,
-                uris: in_login
-                    .uris
-                    .into_iter()
-                    .filter(|u| !u.uri.trim().is_empty())
-                    .map(|u| ItemUri {
-                        uri: u.uri.trim().to_owned(),
-                        match_mode: u.match_mode,
-                    })
-                    .collect(),
-                totp: in_login.totp,
-            }
-        });
+            None => None,
+        };
 
         let item = match existing {
             Some(mut ex) => {

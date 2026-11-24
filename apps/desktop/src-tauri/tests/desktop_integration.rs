@@ -594,7 +594,7 @@ async fn embedded_server_and_ui_bridge_support_full_standalone_flow()
                     "password_history": [],
                     "uris": [{ "uri": "https://forge.example.com", "match_mode": "base_domain" }],
                     "totp": {
-                        "secret_base32": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+                        "secret_base32": "otpauth://totp/Anvil:standalone@example.com?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&issuer=Anvil",
                         "algorithm": "SHA1",
                         "digits": 6,
                         "period_seconds": 30,
@@ -610,6 +610,10 @@ async fn embedded_server_and_ui_bridge_support_full_standalone_flow()
     .await?;
     assert_eq!(st, StatusCode::OK);
     assert_eq!(res["data"]["title"], "Forge Console");
+    assert_eq!(
+        res["data"]["login"]["totp"]["secret_base32"],
+        "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+    );
 
     let (st, totp_res) = send_ipc(
         "cmd_generate_totp",

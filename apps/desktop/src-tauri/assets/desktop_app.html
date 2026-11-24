@@ -384,6 +384,7 @@
         border: 1px solid transparent;
         background: transparent;
         margin-bottom: 4px;
+        cursor: pointer;
       }
 
       .item-row:hover {
@@ -394,6 +395,49 @@
       .item-row.active {
         background: var(--bg-elevated);
         border-color: var(--accent-copper);
+      }
+
+      .list-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        padding: 4px 4px 8px;
+        margin-bottom: 6px;
+        border-bottom: 1px solid var(--border-subtle);
+      }
+
+      .list-count {
+        font-size: 11px;
+        color: var(--text-muted);
+        white-space: nowrap;
+      }
+
+      .kind-pills {
+        display: flex;
+        gap: 4px;
+      }
+
+      .kind-pill {
+        font-size: 11px;
+        padding: 2px 7px;
+        border-radius: 999px;
+        background: transparent;
+        border: 1px solid var(--border-subtle);
+        color: var(--text-secondary);
+      }
+
+      .kind-pill.active {
+        background: rgba(224, 122, 47, 0.16);
+        border-color: rgba(224, 122, 47, 0.45);
+        color: var(--text-primary);
+      }
+
+      .quick-copy-btn {
+        font-size: 10.5px;
+        padding: 2px 6px;
+        border-radius: 5px;
+        color: var(--text-secondary);
       }
 
       .avatar {
@@ -679,6 +723,7 @@
           syncing: false,
           error: null,
           navFilter: { kind: "all", folderId: null },
+          kindFilter: "all",
           searchQuery: "",
           folders: [],
           items: [],
@@ -2150,6 +2195,86 @@
           return el("div", { class: "modal-backdrop" }, [modal]);
         }
 
+        function renderSecurityModal() {
+          const modal = el("div", { class: "modal" });
+          modal.appendChild(
+            el("div", { class: "modal-header" }, [
+              el("h2", { text: "Sécurité & Master Password" }),
+              el("button", {
+                type: "button",
+                text: "Fermer",
+                onClick: () => {
+                  state.modal = null;
+                  render();
+                },
+              }),
+            ]),
+          );
+
+          const curPw = el("input", { type: "password", placeholder: "Mot de passe actuel", required: true });
+          const nextPw = el("input", { type: "password", placeholder: "Nouveau Master Password", required: true });
+          const confirmPw = el("input", { type: "password", placeholder: "Confirmer le nouveau", required: true });
+          const revokeOther = el("input", { type: "checkbox", checked: true });
+
+          const form = el(
+            "form",
+            {
+              onSubmit: (e) => {
+                e.preventDefault();
+                const current = curPw.value;
+                const next = nextPw.value;
+                const confirm = confirmPw.value;
+                curPw.value = "";
+                nextPw.value = "";
+                confirmPw.value = "";
+                if (!current || !next) return;
+                if (next !== confirm) {
+                  state.error = "Les deux nouveaux mots de passe ne correspondent pas.";
+                  render();
+                  return;
+                }
+                void runSafe(async () => {
+                  await ipc("cmd_rotate_password", {
+                    currentPassword: current,
+                    newPassword: next,
+                    revokeOtherSessions: revokeOther.checked,
+                  });
+                  state.modal = null;
+                  await refreshAll();
+                  state.toast = {
+                    label: "Master Password mis à jour",
+                    clear_after_seconds: 8,
+                    expires_at_ms: Date.now() + 8000,
+                  };
+                });
+              },
+            },
+            [
+              el("p", {
+                style: { color: "var(--text-secondary)", fontSize: "12.5px", marginTop: 0 },
+                text: "Enveloppe à nouveau votre VaultKey côté client et met à jour l'authentification sur le serveur.",
+              }),
+              el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "Master Password actuel" }), curPw]),
+              el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "Nouveau Master Password" }), nextPw]),
+              el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "Confirmer le nouveau Master Password" }), confirmPw]),
+              el("label", { style: { display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px", cursor: "pointer" } }, [
+                revokeOther,
+                "Révoquer toutes les autres sessions actives",
+              ]),
+              el("button", {
+                type: "submit",
+                class: "primary",
+                style: { width: "100%" },
+                disabled: state.busy,
+                text: "Mettre à jour le Master Password",
+              }),
+            ],
+          );
+
+          modal.appendChild(form);
+          return el("div", { class: "modal-backdrop" }, [modal]);
+        }
+
         function renderWorkspace() {
           const sidebar = el("aside", { class: "sidebar" });
 
@@ -2291,20 +2416,51 @@
           }
           sidebar.appendChild(footer);
 
-          const listPane = el("section", { class: "list-pane" });
-          if (!state.items.length) {
+          const visibleItems =
+            state.kindFilter === "all"
+              ? state.items
+              : state.items.filter((i) => i.kind === state.kindFilter);
+
+          const listPane = el("section", { class: "list-pane" }, [
+            el("div", { class: "list-header" }, [
+              el("span", { class: "list-count", text: `${visibleItems.length} fiche(s)` }),
+              el("div", { class: "kind-pills" }, [
+                ["all", "Tout"],
+                ["login", "Connexions"],
+                ["secure_note", "Notes"],
+              ].map(([k, lbl]) =>
+                el("button", {
+                  type: "button",
+                  class: `kind-pill ${state.kindFilter === k ? "active" : ""}`,
+                  text: lbl,
+                  onClick: () => {
+                    state.kindFilter = k;
+                    render();
+                  },
+                }),
+              )),
+            ]),
+          ]);
+          if (!visibleItems.length) {
             listPane.appendChild(
               el("div", { class: "empty-state", text: state.searchQuery ? "Aucun résultat." : "Coffre vide." }),
             );
           } else {
-            state.items.forEach((item) => {
+            visibleItems.forEach((item) => {
               const active = item.id === state.selectedItemId && !state.editing;
               const av = el("div", { class: "avatar", style: { background: item.fallback_color || "#E07A2F" }, text: item.fallback_initials });
               listPane.appendChild(
-                el("button", {
-                  type: "button",
+                el("div", {
+                  role: "button",
+                  tabindex: "0",
                   class: `item-row ${active ? "active" : ""}`,
                   onClick: () => void runSafe(() => selectItem(item.id)),
+                  onKeydown: (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      void runSafe(() => selectItem(item.id));
+                    }
+                  },
                 }, [
                   av,
                   el("div", { class: "item-meta" }, [
@@ -2312,6 +2468,26 @@
                     el("div", { class: "item-sub", text: item.subtitle || "—" }),
                   ]),
                   item.has_totp ? el("span", { class: "pill totp", text: "2FA" }) : null,
+                  item.kind === "login"
+                    ? el("button", {
+                        type: "button",
+                        class: "quick-copy-btn",
+                        title: "Copier le mot de passe",
+                        text: "MDP",
+                        onClick: (e) => {
+                          e.stopPropagation();
+                          void runSafe(async () => {
+                            const detail = await ipc("cmd_get_item", { id: item.id });
+                            if (detail?.login?.password) {
+                              state.toast = await ipc("cmd_copy_secret", {
+                                label: "Mot de passe",
+                                value: detail.login.password,
+                              });
+                            }
+                          });
+                        },
+                      })
+                    : null,
                 ]),
               );
             });
@@ -2373,6 +2549,14 @@
                     text: "Import / Export",
                     onClick: () => {
                       state.modal = "import";
+                      render();
+                    },
+                  }),
+                  el("button", {
+                    type: "button",
+                    text: "Sécurité",
+                    onClick: () => {
+                      state.modal = "security";
                       render();
                     },
                   }),
@@ -2439,6 +2623,7 @@
           if (state.modal === "generator") root.appendChild(renderGeneratorModal());
           if (state.modal === "import") root.appendChild(renderImportExportModal());
           if (state.modal === "conflicts") root.appendChild(renderConflictsModal());
+          if (state.modal === "security") root.appendChild(renderSecurityModal());
 
           if (state.toast) {
             const rem = Math.max(0, Math.ceil((state.toast.expires_at_ms - Date.now()) / 1000));
