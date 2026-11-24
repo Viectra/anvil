@@ -21,8 +21,19 @@
     onRegister,
   }: Props = $props();
 
+  const defaultServerUrl = (): string => {
+    if (status.server_url) return status.server_url;
+    if (
+      typeof window !== "undefined" &&
+      (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost")
+    ) {
+      return "http://127.0.0.1:8080";
+    }
+    return "https://";
+  };
+
   let mode = $state<"unlock" | "login" | "register">(status.configured ? "unlock" : "login");
-  let serverUrl = $state(status.server_url ?? "https://");
+  let serverUrl = $state(defaultServerUrl());
   let email = $state(status.email ?? "");
   let password = $state("");
   let inviteToken = $state("");

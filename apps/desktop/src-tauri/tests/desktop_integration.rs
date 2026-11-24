@@ -349,3 +349,135 @@ async fn bitwarden_json_import_totp_and_clipboard_autoclear_work_end_to_end()
     let _ = Duration::from_secs(1);
     Ok(())
 }
+
+#[tokio::test]
+async fn http_bridge_enforces_token_loopback_and_dispatches_ipc()
+-> Result<(), Box<dyn std::error::Error>> {
+    use std::net::SocketAddr;
+
+    use anvil_desktop::http_bridge::{
+        BRIDGE_TOKEN_HEADER, HttpBridgeError, build_bridge_router, serve_http_bridge,
+    };
+    use axum::body::Body;
+    use http::{Method, Request, StatusCode, header};
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+
+    let harness = setup_seeded_host(default_biometric_provider()).await?;
+    let host = Arc::new(harness.host);
+
+    let weak_err = build_bridge_router(Arc::clone(&host), "too-short".to_owned())
+        .err()
+        .ok_or("expected weak token error")?;
+    assert!(matches!(weak_err, HttpBridgeError::WeakToken));
+
+    let valid_token = "0123456789abcdef0123456789abcdef".to_owned();
+    let non_loopback: SocketAddr = "0.0.0.0:1425".parse()?;
+    let addr_err = serve_http_bridge(Arc::clone(&host), non_loopback, valid_token.clone())
+        .await
+        .err()
+        .ok_or("expected non-loopback bind rejection")?;
+    assert!(matches!(addr_err, HttpBridgeError::NonLoopbackAddress(_)));
+
+    let router = build_bridge_router(Arc::clone(&host), valid_token.clone())?;
+
+    let health_resp = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/api/desktop-health")
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(health_resp.status(), StatusCode::OK);
+    let health_bytes = health_resp.into_body().collect().await?.to_bytes();
+    let health_json: serde_json::Value = serde_json::from_slice(&health_bytes)?;
+    assert_eq!(health_json["status"], "ok");
+    assert_eq!(health_json["version"], env!("CARGO_PKG_VERSION"));
+
+    let unauth_resp = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/desktop-ipc")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"command":"cmd_status","payload":{}}"#))?,
+        )
+        .await?;
+    assert_eq!(unauth_resp.status(), StatusCode::UNAUTHORIZED);
+
+    let wrong_tok_resp = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/desktop-ipc")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(BRIDGE_TOKEN_HEADER, "wrong-token-value-with-32-chars-ok")
+                .body(Body::from(r#"{"command":"cmd_status","payload":{}}"#))?,
+        )
+        .await?;
+    assert_eq!(wrong_tok_resp.status(), StatusCode::UNAUTHORIZED);
+
+    let status_resp = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/desktop-ipc")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(BRIDGE_TOKEN_HEADER, &valid_token)
+                .body(Body::from(r#"{"command":"cmd_status","payload":{}}"#))?,
+        )
+        .await?;
+    assert_eq!(status_resp.status(), StatusCode::OK);
+    assert_eq!(
+        status_resp
+            .headers()
+            .get(header::CACHE_CONTROL)
+            .and_then(|v| v.to_str().ok()),
+        Some("no-store")
+    );
+    let status_bytes = status_resp.into_body().collect().await?.to_bytes();
+    let status_json: serde_json::Value = serde_json::from_slice(&status_bytes)?;
+    assert_eq!(status_json["ok"], true);
+    assert_eq!(status_json["data"]["configured"], true);
+    assert_eq!(status_json["data"]["unlocked"], false);
+
+    let toggle_resp = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/desktop-ipc")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(BRIDGE_TOKEN_HEADER, &valid_token)
+                .body(Body::from(
+                    r#"{"command":"cmd_window_toggle_maximize","payload":{}}"#,
+                ))?,
+        )
+        .await?;
+    assert_eq!(toggle_resp.status(), StatusCode::OK);
+
+    let chrome_resp = router
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/desktop-ipc")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(BRIDGE_TOKEN_HEADER, &valid_token)
+                .body(Body::from(
+                    r#"{"command":"cmd_window_chrome","payload":{}}"#,
+                ))?,
+        )
+        .await?;
+    assert_eq!(chrome_resp.status(), StatusCode::OK);
+    let chrome_bytes = chrome_resp.into_body().collect().await?.to_bytes();
+    let chrome_json: serde_json::Value = serde_json::from_slice(&chrome_bytes)?;
+    assert_eq!(chrome_json["ok"], true);
+    assert_eq!(chrome_json["data"]["is_maximized"], true);
+
+    Ok(())
+}

@@ -4,6 +4,7 @@
 
 use std::env;
 use std::io::{self, BufRead, Write};
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -12,6 +13,7 @@ use anvil_client_core::cache::EncryptedLocalCache;
 use anvil_desktop::biometric::default_biometric_provider;
 use anvil_desktop::clipboard::SecureClipboardManager;
 use anvil_desktop::commands::DesktopCommandHost;
+use anvil_desktop::http_bridge::{BRIDGE_TOKEN_ENV, MIN_BRIDGE_TOKEN_LEN, serve_http_bridge};
 use anvil_desktop::platform::windows::{
     OsSessionLockMonitor, TitlebarHitConfig, WindowRect, compute_hit_zone,
 };
@@ -37,6 +39,7 @@ fn print_help() {
          \t--cache <PATH>       Path to encrypted SQLite vault cache\n\
          \t--server <URL>       Default Anvil server URL (default: http://127.0.0.1:8080)\n\
          \t--ipc-stdio          Run JSON-line IPC command loop on stdin/stdout\n\
+         \t--http-bridge <ADDR> Run loopback HTTP IPC bridge (uses ANVIL_DESKTOP_BRIDGE_TOKEN)\n\
          \t--hit-check          Print default custom titlebar hit zones\n\
          \t--version            Print version and exit\n\
          \t-h, --help           Print help",
@@ -53,6 +56,7 @@ async fn main() -> ExitCode {
     let mut cache_path = default_cache_path();
     let mut server_url = "http://127.0.0.1:8080".to_owned();
     let mut ipc_stdio = false;
+    let mut http_bridge_addr: Option<SocketAddr> = None;
     let mut hit_check = false;
 
     while let Some(arg) = args.next() {
@@ -66,6 +70,19 @@ async fn main() -> ExitCode {
                 return ExitCode::SUCCESS;
             }
             "--ipc-stdio" => ipc_stdio = true,
+            "--http-bridge" => match args.next() {
+                Some(raw) => match raw.parse::<SocketAddr>() {
+                    Ok(addr) => http_bridge_addr = Some(addr),
+                    Err(err) => {
+                        eprintln!("invalid socket address for --http-bridge `{raw}`: {err}");
+                        return ExitCode::FAILURE;
+                    }
+                },
+                None => {
+                    eprintln!("missing value for --http-bridge");
+                    return ExitCode::FAILURE;
+                }
+            },
             "--hit-check" => hit_check = true,
             "--cache" => match args.next() {
                 Some(path) => cache_path = PathBuf::from(path),
@@ -137,6 +154,27 @@ async fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+
+    if ipc_stdio && http_bridge_addr.is_some() {
+        eprintln!("--ipc-stdio and --http-bridge cannot be used together");
+        return ExitCode::FAILURE;
+    }
+
+    if let Some(addr) = http_bridge_addr {
+        let Ok(token) = env::var(BRIDGE_TOKEN_ENV) else {
+            eprintln!(
+                "missing {BRIDGE_TOKEN_ENV} environment variable (minimum {MIN_BRIDGE_TOKEN_LEN} characters)"
+            );
+            return ExitCode::FAILURE;
+        };
+        println!("Anvil Desktop HTTP bridge listening on http://{addr}");
+        let _ = io::stdout().flush();
+        if let Err(err) = serve_http_bridge(Arc::new(host), addr, token).await {
+            eprintln!("HTTP bridge error: {err}");
+            return ExitCode::FAILURE;
+        }
+        return ExitCode::SUCCESS;
+    }
 
     if ipc_stdio {
         let stdin = io::stdin();

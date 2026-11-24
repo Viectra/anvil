@@ -1358,6 +1358,15 @@ impl DesktopCommandHost {
                 serialize_json(&self.cmd_open_external_url(&a.url)?)?
             }
             "cmd_window_chrome" => serialize_json(&self.cmd_window_chrome()?)?,
+            "cmd_window_minimize" => "null".to_owned(),
+            "cmd_window_toggle_maximize" => {
+                let next_maximized = !self.cmd_window_chrome()?.is_maximized;
+                if let Ok(mut guard) = self.chrome.write() {
+                    guard.is_maximized = next_maximized;
+                }
+                "null".to_owned()
+            }
+            "cmd_window_close" => "null".to_owned(),
             "cmd_hit_test" => {
                 let a: HitTestRequestDto = parse_json(body)?;
                 serialize_json(&self.cmd_hit_test(a))?

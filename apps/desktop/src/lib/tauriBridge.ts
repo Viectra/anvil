@@ -30,12 +30,43 @@ declare global {
   }
 }
 
+interface HttpBridgeEnvelope<T> {
+  ok: boolean;
+  data?: T;
+  error?: string;
+}
+
 async function invokeIpc<T>(command: string, payload: Record<string, unknown> = {}): Promise<T> {
   const internals = window.__TAURI_INTERNALS__;
-  if (!internals || typeof internals.invoke !== "function") {
-    throw new Error(`Tauri IPC runtime unavailable for command '${command}'`);
+  if (internals && typeof internals.invoke === "function") {
+    return internals.invoke<T>(command, payload);
   }
-  return internals.invoke<T>(command, payload);
+
+  let response: Response;
+  try {
+    response = await fetch("/api/desktop-ipc", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ command, payload }),
+    });
+  } catch {
+    throw new Error(
+      `Desktop IPC host unreachable for command '${command}' (start anvil-desktop with --http-bridge via scripts/run-desktop.ps1)`,
+    );
+  }
+
+  let envelope: HttpBridgeEnvelope<T>;
+  try {
+    envelope = (await response.json()) as HttpBridgeEnvelope<T>;
+  } catch {
+    throw new Error(`Invalid IPC response from desktop host (HTTP ${response.status})`);
+  }
+
+  if (!response.ok || !envelope.ok) {
+    throw new Error(envelope.error ?? `Desktop IPC error (HTTP ${response.status})`);
+  }
+
+  return envelope.data as T;
 }
 
 /** Tauri v2 IPC implementation of `AnvilClientBridge`. */
@@ -209,8 +240,11 @@ export class TauriAnvilBridge implements AnvilClientBridge {
     return invokeIpc<void>("cmd_window_close");
   }
 
-  openExternalUrl(url: string): Promise<void> {
-    return invokeIpc<void>("cmd_open_external_url", { url });
+  async openExternalUrl(url: string): Promise<void> {
+    const validated = await invokeIpc<string>("cmd_open_external_url", { url });
+    if (!window.__TAURI_INTERNALS__ && typeof validated === "string" && validated.length > 0) {
+      window.open(validated, "_blank", "noopener,noreferrer");
+    }
   }
 }
 
