@@ -20,7 +20,7 @@
       type="button"
       onclick={onNewItem}
       title="Nouvelle fiche (Ctrl+N)"
-      class="rounded-[6px] bg-[var(--accent-forge)] px-2.5 py-1 text-[12px] font-semibold text-[#0B0C0F] transition-colors hover:bg-[var(--accent-forge-hover)]"
+      class="rounded-[6px] bg-[var(--accent-forge)] px-2.5 py-1 text-[12px] font-semibold text-white transition-colors hover:bg-[var(--accent-forge-hover)]"
     >
       + Nouveau
     </button>

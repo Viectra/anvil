@@ -155,7 +155,7 @@
         <button
           type="button"
           onclick={() => void onCopy("Mot de passe généré", preview)}
-          class="rounded-[6px] bg-[var(--accent-forge)] px-4 py-1.5 text-[12.5px] font-semibold text-[#0B0C0F] hover:bg-[var(--accent-forge-hover)]"
+          class="rounded-[6px] bg-[var(--accent-forge)] px-4 py-1.5 text-[12.5px] font-semibold text-white hover:bg-[var(--accent-forge-hover)]"
         >
           Copier (auto-clear 30s)
         </button>

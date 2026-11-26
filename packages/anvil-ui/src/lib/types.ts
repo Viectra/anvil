@@ -129,6 +129,8 @@ export interface VaultStatusDto {
   biometric_enabled: boolean;
   server_url: string | null;
   email: string | null;
+  role?: string | null;
+  avatar_data_url?: string | null;
   sync_revision: number;
   pending_conflicts: number;
 }

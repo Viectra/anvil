@@ -6,23 +6,33 @@
     <title>Anvil</title>
     <style>
       :root {
-        --bg-void: #0e1015;
-        --bg-surface: #13161d;
-        --bg-elevated: #191c24;
-        --bg-hover: #212531;
-        --border-subtle: #262b38;
-        --border-strong: #353c4f;
-        --text-primary: #f1f3f7;
-        --text-secondary: #9aa4b8;
-        --text-muted: #667085;
-        --accent-copper: #e07a2f;
-        --accent-copper-hover: #ec8a42;
-        --accent-steel: #5b8def;
-        --status-ok: #2ecc71;
-        --status-warn: #f59e0b;
-        --status-danger: #e63946;
+        color-scheme: dark;
+        --bg-titlebar: #121215;
+        --bg-canvas: #1b1b1f;
+        --bg-void: #141418;
+        --bg-surface: #202025;
+        --bg-elevated: #2b2b31;
+        --bg-modal: #111114;
+        --bg-hover: #32323a;
+        --border-subtle: #2e2e36;
+        --border-strong: #42424d;
+        --text-primary: #f4f4f7;
+        --text-secondary: #a4a4b2;
+        --text-muted: #70707e;
+        --accent: #7c6dfa;
+        --accent-hover: #8d80ff;
+        --accent-muted: rgba(124, 109, 250, 0.16);
+        --accent-border: rgba(124, 109, 250, 0.42);
+        --light-surface: #dcdce2;
+        --light-surface-hover: #eaeaf0;
+        --light-text: #16161a;
+        --light-placeholder: #62626d;
+        --status-ok: #2fb379;
+        --status-warn: #e5a93c;
+        --status-danger: #e54858;
+        --accent-blue: #4e86f5;
         --mono: ui-monospace, "Cascadia Mono", "Consolas", monospace;
-        --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --sans: "Segoe UI Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       }
 
       * {
@@ -35,12 +45,17 @@
         padding: 0;
         height: 100%;
         width: 100%;
-        background: var(--bg-void);
+        background: var(--bg-canvas);
         color: var(--text-primary);
         font-family: var(--sans);
         font-size: 13.5px;
         line-height: 1.45;
         overflow: hidden;
+        user-select: none;
+      }
+
+      .selectable {
+        user-select: text;
       }
 
       button,
@@ -58,7 +73,7 @@
         background: var(--bg-elevated);
         border-radius: 7px;
         padding: 7px 12px;
-        transition: background 0.14s ease, border-color 0.14s ease, opacity 0.14s ease;
+        transition: background 0.14s ease, border-color 0.14s ease, opacity 0.14s ease, transform 0.08s ease;
       }
 
       button:hover:not(:disabled) {
@@ -72,25 +87,37 @@
       }
 
       button.primary {
-        background: var(--accent-copper);
-        border-color: var(--accent-copper);
-        color: #101218;
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #ffffff;
         font-weight: 600;
       }
 
       button.primary:hover:not(:disabled) {
-        background: var(--accent-copper-hover);
-        border-color: var(--accent-copper-hover);
+        background: var(--accent-hover);
+        border-color: var(--accent-hover);
+      }
+
+      button.light {
+        background: var(--light-surface);
+        border-color: transparent;
+        color: var(--light-text);
+        font-weight: 600;
+      }
+
+      button.light:hover:not(:disabled) {
+        background: var(--light-surface-hover);
+        border-color: transparent;
       }
 
       button.danger {
-        color: #ffb4ba;
-        border-color: rgba(230, 57, 70, 0.45);
-        background: rgba(230, 57, 70, 0.12);
+        color: #ffb6bd;
+        border-color: rgba(229, 72, 88, 0.45);
+        background: rgba(229, 72, 88, 0.14);
       }
 
       button.danger:hover:not(:disabled) {
-        background: rgba(230, 57, 70, 0.24);
+        background: rgba(229, 72, 88, 0.25);
       }
 
       button.ghost {
@@ -103,6 +130,20 @@
         border-color: var(--border-subtle);
       }
 
+      button.link-btn {
+        background: transparent;
+        border: none;
+        padding: 0;
+        color: var(--accent);
+        font-weight: 600;
+      }
+
+      button.link-btn:hover:not(:disabled) {
+        background: transparent;
+        color: var(--accent-hover);
+        text-decoration: underline;
+      }
+
       input,
       select,
       textarea {
@@ -110,19 +151,20 @@
         background: var(--bg-void);
         border: 1px solid var(--border-subtle);
         border-radius: 7px;
-        padding: 8px 10px;
+        padding: 9px 11px;
         outline: none;
+        user-select: text;
       }
 
       input:focus,
       select:focus,
       textarea:focus {
-        border-color: var(--accent-copper);
+        border-color: var(--accent);
       }
 
       input[type="checkbox"] {
         width: auto;
-        accent-color: var(--accent-copper);
+        accent-color: var(--accent);
       }
 
       .mono {
@@ -130,14 +172,95 @@
       }
 
       .app-root {
+        position: relative;
         display: flex;
         flex-direction: column;
         height: 100vh;
         width: 100vw;
+        background: var(--bg-canvas);
+        border: 1px solid #26262e;
       }
 
-      .topbar {
-        height: 52px;
+      /* Invisible border resize handles for frameless window */
+      .resize-edge {
+        position: fixed;
+        z-index: 120;
+      }
+      .resize-n { top: 0; left: 6px; right: 6px; height: 4px; cursor: n-resize; }
+      .resize-s { bottom: 0; left: 6px; right: 6px; height: 4px; cursor: s-resize; }
+      .resize-e { top: 6px; bottom: 6px; right: 0; width: 4px; cursor: e-resize; }
+      .resize-w { top: 6px; bottom: 6px; left: 0; width: 4px; cursor: w-resize; }
+      .resize-nw { top: 0; left: 0; width: 8px; height: 8px; cursor: nw-resize; }
+      .resize-ne { top: 0; right: 0; width: 8px; height: 8px; cursor: ne-resize; }
+      .resize-sw { bottom: 0; left: 0; width: 8px; height: 8px; cursor: sw-resize; }
+      .resize-se { bottom: 0; right: 0; width: 8px; height: 8px; cursor: se-resize; }
+
+      /* Custom Frameless Titlebar */
+      .titlebar {
+        height: 44px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: var(--bg-titlebar);
+        border-bottom: 1px solid #24242b;
+        padding-left: 14px;
+      }
+
+      .titlebar-brand {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        pointer-events: none;
+      }
+
+      .titlebar-brand-name {
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        color: var(--text-primary);
+      }
+
+      .titlebar-drag {
+        flex: 1;
+        height: 100%;
+        display: flex;
+        align-items: center;
+      }
+
+      .win-controls {
+        display: flex;
+        align-items: stretch;
+        height: 100%;
+      }
+
+      .win-btn {
+        width: 46px;
+        height: 44px;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+        color: var(--text-secondary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+      }
+
+      .win-btn:hover:not(:disabled) {
+        background: #272730;
+        border-color: transparent;
+        color: var(--text-primary);
+      }
+
+      .win-btn.close:hover:not(:disabled) {
+        background: #e54858;
+        color: #ffffff;
+      }
+
+      /* Secondary Workspace Toolbar */
+      .workspace-bar {
+        height: 48px;
         flex-shrink: 0;
         display: flex;
         align-items: center;
@@ -148,32 +271,14 @@
         border-bottom: 1px solid var(--border-subtle);
       }
 
-      .brand {
-        display: flex;
-        align-items: center;
-        gap: 9px;
-        font-weight: 600;
-        letter-spacing: 0.01em;
-        min-width: 170px;
-      }
-
-      .brand-tag {
-        font-size: 11px;
-        padding: 2px 6px;
-        border-radius: 999px;
-        background: rgba(91, 141, 239, 0.16);
-        color: var(--accent-steel);
-        border: 1px solid rgba(91, 141, 239, 0.35);
-      }
-
       .search-wrap {
         flex: 1;
-        max-width: 420px;
+        max-width: 390px;
         position: relative;
       }
 
       .search-wrap input {
-        padding-right: 54px;
+        padding: 7px 56px 7px 11px;
         background: var(--bg-void);
       }
 
@@ -182,7 +287,8 @@
         right: 9px;
         top: 50%;
         transform: translateY(-50%);
-        font-size: 11px;
+        font-size: 10.5px;
+        font-family: var(--mono);
         color: var(--text-muted);
         border: 1px solid var(--border-subtle);
         border-radius: 4px;
@@ -193,7 +299,7 @@
       .topbar-actions {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 7px;
       }
 
       .error-banner {
@@ -201,93 +307,197 @@
         align-items: center;
         justify-content: space-between;
         gap: 12px;
-        padding: 7px 14px;
-        background: rgba(230, 57, 70, 0.14);
-        border-bottom: 1px solid rgba(230, 57, 70, 0.38);
-        color: #ff9ba3;
+        padding: 8px 16px;
+        background: rgba(229, 72, 88, 0.16);
+        border-bottom: 1px solid rgba(229, 72, 88, 0.42);
+        color: #ffb2ba;
         font-size: 12.5px;
         flex-shrink: 0;
       }
 
-      .unlock-screen {
+      /* Auth Screens (Unlock / Login / SignIn) matching mockups */
+      .auth-stage {
         flex: 1;
         display: flex;
         align-items: center;
         justify-content: center;
         padding: 24px;
         overflow-y: auto;
-        background: radial-gradient(circle at top, rgba(224, 122, 47, 0.08), transparent 46%),
-          var(--bg-surface);
+        background: radial-gradient(circle at 50% 15%, rgba(124, 109, 250, 0.08), transparent 52%),
+          var(--bg-canvas);
       }
 
-      .unlock-card {
+      .auth-card {
         width: 100%;
         max-width: 410px;
         background: var(--bg-elevated);
-        border: 1px solid var(--border-subtle);
-        border-radius: 12px;
-        padding: 26px;
+        border: 1px solid #35353e;
+        border-radius: 14px;
+        padding: 32px 30px 26px;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.42);
       }
 
-      .unlock-head {
+      .auth-hero {
         display: flex;
         flex-direction: column;
         align-items: center;
         text-align: center;
+        margin-bottom: 20px;
       }
 
-      .unlock-head h1 {
-        margin: 10px 0 4px;
-        font-size: 20px;
-      }
-
-      .unlock-head p {
-        margin: 0;
-        color: var(--text-secondary);
-        font-size: 12.5px;
-      }
-
-      .tabs {
+      .auth-picture-box {
+        width: 96px;
+        height: 96px;
+        border-radius: 10px;
+        background: var(--light-surface);
+        color: #35353f;
         display: flex;
-        gap: 4px;
-        margin: 18px 0 16px;
-        padding: 4px;
-        background: var(--bg-void);
-        border: 1px solid var(--border-subtle);
-        border-radius: 8px;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        border: 2px solid #3c3c47;
+        margin-bottom: 14px;
       }
 
-      .tabs button {
-        flex: 1;
-        border: none;
-        background: transparent;
-        color: var(--text-secondary);
-        font-size: 12.5px;
-        padding: 6px 8px;
+      .auth-picture-box img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
       }
 
-      .tabs button.active {
-        background: var(--bg-elevated);
-        color: var(--text-primary);
-        border: 1px solid var(--border-subtle);
+      .auth-email {
+        font-size: 14px;
         font-weight: 600;
+        color: var(--text-primary);
+        word-break: break-all;
       }
 
-      .form-group {
-        margin-bottom: 12px;
+      .auth-url {
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-top: 2px;
+        word-break: break-all;
       }
 
-      .form-label {
+      .auth-subtitle {
+        margin: 0;
+        font-size: 12.5px;
+        color: var(--text-secondary);
+      }
+
+      .auth-section-title {
+        font-size: 12.5px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        margin-bottom: 10px;
+      }
+
+      .auth-field-wrap {
+        position: relative;
+        margin-bottom: 11px;
+      }
+
+      .auth-label {
         display: block;
         font-size: 12px;
+        font-weight: 500;
         color: var(--text-secondary);
         margin-bottom: 5px;
       }
 
+      .auth-input {
+        width: 100%;
+        background: var(--light-surface);
+        color: var(--light-text);
+        border: 2px solid transparent;
+        border-radius: 7px;
+        padding: 9px 12px;
+        font-size: 13px;
+        font-weight: 500;
+      }
+
+      .auth-input::placeholder {
+        color: var(--light-placeholder);
+        opacity: 1;
+      }
+
+      .auth-input:focus {
+        border-color: var(--accent);
+        background: #e6e6ec;
+      }
+
+      .auth-inline-chip {
+        position: absolute;
+        right: 7px;
+        top: 50%;
+        transform: translateY(-50%);
+        padding: 3px 7px;
+        font-size: 10.5px;
+        border-radius: 5px;
+        background: rgba(22, 22, 26, 0.1);
+        color: #3a3a46;
+        border: 1px solid rgba(22, 22, 26, 0.16);
+      }
+
+      .auth-inline-chip:hover:not(:disabled) {
+        background: rgba(124, 109, 250, 0.22);
+        color: #16161a;
+        border-color: var(--accent);
+      }
+
+      .auth-submit {
+        width: 100%;
+        padding: 10px 14px;
+        font-size: 13.5px;
+        margin-top: 4px;
+      }
+
+      .auth-or {
+        text-align: center;
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin: 12px 0;
+      }
+
+      .auth-footer-link {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 6px;
+        margin-top: 12px;
+        font-size: 12px;
+        color: var(--text-secondary);
+      }
+
+      .role-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 10.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .role-badge.admin {
+        background: var(--accent-muted);
+        color: #c2baff;
+        border: 1px solid var(--accent-border);
+      }
+
+      .role-badge.user {
+        background: rgba(255, 255, 255, 0.08);
+        color: var(--text-secondary);
+        border: 1px solid var(--border-strong);
+      }
+
+      /* Workspace 3-pane layout */
       .workspace {
         flex: 1;
         display: grid;
-        grid-template-columns: 230px 300px 1fr;
+        grid-template-columns: 236px 305px 1fr;
         min-height: 0;
       }
 
@@ -334,10 +544,10 @@
       }
 
       .nav-btn.active {
-        background: rgba(224, 122, 47, 0.14);
-        border-color: rgba(224, 122, 47, 0.36);
+        background: var(--accent-muted);
+        border-color: var(--accent-border);
         color: var(--text-primary);
-        font-weight: 500;
+        font-weight: 600;
       }
 
       .folder-row {
@@ -366,8 +576,40 @@
         color: var(--text-secondary);
       }
 
+      .account-chip {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px;
+        border-radius: 9px;
+        background: var(--bg-canvas);
+        border: 1px solid var(--border-subtle);
+        margin-bottom: 8px;
+      }
+
+      .account-chip-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-strong);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        flex-shrink: 0;
+        font-weight: 700;
+        color: var(--accent);
+      }
+
+      .account-chip-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
       .list-pane {
-        background: var(--bg-void);
+        background: var(--bg-canvas);
         border-right: 1px solid var(--border-subtle);
         overflow-y: auto;
         padding: 8px;
@@ -394,7 +636,7 @@
 
       .item-row.active {
         background: var(--bg-elevated);
-        border-color: var(--accent-copper);
+        border-color: var(--accent);
       }
 
       .list-header {
@@ -428,8 +670,8 @@
       }
 
       .kind-pill.active {
-        background: rgba(224, 122, 47, 0.16);
-        border-color: rgba(224, 122, 47, 0.45);
+        background: var(--accent-muted);
+        border-color: var(--accent-border);
         color: var(--text-primary);
       }
 
@@ -489,8 +731,8 @@
       }
 
       .pill.totp {
-        border-color: rgba(91, 141, 239, 0.45);
-        color: var(--accent-steel);
+        border-color: rgba(78, 134, 245, 0.45);
+        color: var(--accent-blue);
       }
 
       .detail-pane {
@@ -566,8 +808,8 @@
         gap: 14px;
         padding: 14px 16px;
         border-radius: 9px;
-        background: rgba(91, 141, 239, 0.08);
-        border: 1px solid rgba(91, 141, 239, 0.35);
+        background: rgba(124, 109, 250, 0.09);
+        border: 1px solid var(--accent-border);
         margin-bottom: 12px;
       }
 
@@ -620,12 +862,13 @@
       .modal-backdrop {
         position: fixed;
         inset: 0;
-        background: rgba(6, 8, 12, 0.74);
+        background: rgba(8, 8, 12, 0.72);
+        backdrop-filter: blur(3px);
         display: flex;
         align-items: center;
         justify-content: center;
         padding: 20px;
-        z-index: 40;
+        z-index: 80;
       }
 
       .modal {
@@ -635,8 +878,28 @@
         overflow-y: auto;
         background: var(--bg-elevated);
         border: 1px solid var(--border-strong);
-        border-radius: 12px;
-        padding: 20px;
+        border-radius: 13px;
+        padding: 22px;
+        box-shadow: 0 28px 70px rgba(0, 0, 0, 0.6);
+      }
+
+      .confirm-modal {
+        width: 100%;
+        max-width: 360px;
+        background: var(--bg-modal);
+        border: 1px solid #2b2b34;
+        border-radius: 14px;
+        padding: 30px 26px 26px;
+        text-align: center;
+        box-shadow: 0 28px 80px rgba(0, 0, 0, 0.72);
+      }
+
+      .confirm-bang {
+        font-size: 32px;
+        font-weight: 800;
+        line-height: 1;
+        margin-bottom: 12px;
+        color: var(--text-primary);
       }
 
       .modal-header {
@@ -651,16 +914,54 @@
         font-size: 16.5px;
       }
 
+      .tabs {
+        display: flex;
+        gap: 4px;
+        margin: 0 0 14px;
+        padding: 4px;
+        background: var(--bg-void);
+        border: 1px solid var(--border-subtle);
+        border-radius: 8px;
+      }
+
+      .tabs button {
+        flex: 1;
+        border: none;
+        background: transparent;
+        color: var(--text-secondary);
+        font-size: 12.5px;
+        padding: 6px 8px;
+      }
+
+      .tabs button.active {
+        background: var(--bg-elevated);
+        color: var(--text-primary);
+        border: 1px solid var(--border-subtle);
+        font-weight: 600;
+      }
+
       .toast {
         position: fixed;
         right: 18px;
         bottom: 18px;
         min-width: 250px;
         background: var(--bg-elevated);
-        border: 1px solid var(--accent-copper);
+        border: 1px solid var(--accent);
         border-radius: 9px;
         padding: 10px 14px;
-        z-index: 50;
+        z-index: 95;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+      }
+
+      .form-group {
+        margin-bottom: 12px;
+      }
+
+      .form-label {
+        display: block;
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin-bottom: 5px;
       }
 
       .grid-2 {
@@ -686,6 +987,7 @@
 
         const BRIDGE_TOKEN = __ANVIL_BOOTSTRAP_TOKEN__;
         const DEFAULT_SERVER_URL = __ANVIL_DEFAULT_SERVER_URL__;
+        const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 
         const IMPORT_FORMATS = [
           ["bitwarden_json", "Bitwarden JSON (non chiffré)"],
@@ -712,13 +1014,17 @@
             biometric_enabled: false,
             server_url: null,
             email: null,
+            role: null,
+            avatar_data_url: null,
             sync_revision: 0,
             pending_conflicts: 0,
           },
+          chrome: { is_maximized: false },
           authMode: "login",
-          authServerUrl: DEFAULT_SERVER_URL || "http://127.0.0.1:8080",
+          authServerUrl: "",
           authEmail: "",
           authInvite: "",
+          showLogoutConfirm: false,
           busy: false,
           syncing: false,
           error: null,
@@ -735,8 +1041,8 @@
           editForm: null,
           totp: null,
           showAddFolder: false,
-          showBiometricPrompt: false,
           modal: null,
+          accountTab: "profile",
           importPreview: null,
           conflicts: [],
           toast: null,
@@ -801,37 +1107,84 @@
           return node;
         }
 
-        function makeLogoSvg(size = 24) {
+        function makeSvg(viewBox, width, height, paths = []) {
           const ns = "http://www.w3.org/2000/svg";
           const svg = document.createElementNS(ns, "svg");
-          svg.setAttribute("viewBox", "0 0 64 64");
-          svg.setAttribute("width", String(size));
-          svg.setAttribute("height", String(size));
+          svg.setAttribute("viewBox", viewBox);
+          svg.setAttribute("width", String(width));
+          svg.setAttribute("height", String(height));
           svg.setAttribute("fill", "none");
-
-          const p1 = document.createElementNS(ns, "path");
-          p1.setAttribute("d", "M22 6H42L54 16V35L32 58L10 35V16L22 6Z");
-          p1.setAttribute("fill", "#191C24");
-          p1.setAttribute("stroke", "#2E3444");
-          p1.setAttribute("stroke-width", "2.5");
-          svg.appendChild(p1);
-
-          const p2 = document.createElementNS(ns, "path");
-          p2.setAttribute("d", "M14 25.5H47.5V27.6H41.5L37.5 31V38.2L43.5 43V46H20.5V43L26.5 38.2V31L21.5 27.8L14 25.5Z");
-          p2.setAttribute("fill", "#F1F3F7");
-          svg.appendChild(p2);
-
-          const p3 = document.createElementNS(ns, "path");
-          p3.setAttribute("d", "M13.5 22.5H48V26H14.5L13.5 22.5Z");
-          p3.setAttribute("fill", "#E07A2F");
-          svg.appendChild(p3);
+          for (const attrs of paths) {
+            const shapeTag = attrs._tag || "path";
+            const node = document.createElementNS(ns, shapeTag);
+            for (const [k, v] of Object.entries(attrs)) {
+              if (k === "_tag") continue;
+              node.setAttribute(k, String(v));
+            }
+            svg.appendChild(node);
+          }
           return svg;
+        }
+
+        function makeLogoSvg(size = 28) {
+          return makeSvg("0 0 64 64", size, size, [
+            {
+              d: "M22 6H42L54 16V35L32 58L10 35V16L22 6Z",
+              fill: "#232329",
+              stroke: "#3C3C47",
+              "stroke-width": "2.4",
+            },
+            {
+              d: "M14 25.5H47.5V27.6H41.5L37.5 31V38.2L43.5 43V46H20.5V43L26.5 38.2V31L21.5 27.8L14 25.5Z",
+              fill: "#F4F4F7",
+            },
+            {
+              d: "M13.5 22.5H48V26H14.5L13.5 22.5Z",
+              fill: "#7C6DFA",
+            },
+          ]);
+        }
+
+        function makeUserSilhouetteSvg(size = 44) {
+          return makeSvg("0 0 24 24", size, size, [
+            { _tag: "circle", cx: "12", cy: "8", r: "4", fill: "#525260" },
+            { d: "M4 20c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5", fill: "#525260" },
+          ]);
+        }
+
+        function roleBadgeEl(role) {
+          const normalized = (role || "user").toLowerCase();
+          const isAdmin = normalized === "admin";
+          return el("span", {
+            class: `role-badge ${isAdmin ? "admin" : "user"}`,
+            text: isAdmin ? "Admin" : "User",
+          });
+        }
+
+        function hasValidImageMagicBytes(bytes) {
+          if (bytes.length < 12) return false;
+          const isPng =
+            bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 &&
+            bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a;
+          const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+          const isWebp =
+            bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+            bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
+          return isPng || isJpeg || isWebp;
+        }
+
+        function showToast(label, durationSec = 5) {
+          state.toast = {
+            label,
+            clear_after_seconds: durationSec,
+            expires_at_ms: Date.now() + durationSec * 1000,
+          };
         }
 
         function strengthStyle(score) {
           if (score <= 1) return { pct: 25, color: "var(--status-danger)", label: "Faible" };
           if (score === 2) return { pct: 50, color: "var(--status-warn)", label: "Moyen" };
-          if (score === 3) return { pct: 75, color: "var(--accent-steel)", label: "Bon" };
+          if (score === 3) return { pct: 75, color: "var(--accent-blue)", label: "Bon" };
           return { pct: 100, color: "var(--status-ok)", label: "Robuste" };
         }
 
@@ -903,6 +1256,12 @@
 
         async function refreshAll(preferredItemId = null) {
           state.status = await ipc("cmd_status");
+          try {
+            state.chrome = await ipc("cmd_window_chrome");
+          } catch {
+            // Keep cached state when chrome query unavailable.
+          }
+
           if (!state.status.unlocked) {
             state.folders = [];
             state.items = [];
@@ -911,13 +1270,14 @@
             state.selectedStrength = null;
             state.totp = null;
             state.editing = false;
-            if (state.status.configured && state.authMode !== "register") {
+            state.modal = null;
+            if (state.status.configured) {
               state.authMode = "unlock";
-            } else if (!state.status.configured && state.authMode === "unlock") {
-              state.authMode = "register";
+              if (state.status.server_url) state.authServerUrl = state.status.server_url;
+              if (state.status.email) state.authEmail = state.status.email;
+            } else {
+              if (state.authMode === "unlock") state.authMode = "login";
             }
-            if (state.status.server_url) state.authServerUrl = state.status.server_url;
-            if (state.status.email) state.authEmail = state.status.email;
             return;
           }
 
@@ -997,86 +1357,332 @@
           render();
         }
 
-        function renderUnlockScreen() {
-          const card = el("div", { class: "unlock-card" });
-          const subtitle =
-            state.authMode === "unlock"
-              ? "Déverrouillez votre coffre chiffré localement."
-              : state.authMode === "register"
-                ? "Créez un coffre local Zero-Knowledge prêt à l'emploi."
-                : "Connexion à une instance Anvil existante.";
+        function attachWindowDragBehavior(dragZone) {
+          let dragOrigin = null;
+          let dragStarted = false;
+          dragZone.addEventListener("mousedown", (e) => {
+            if (e.button !== 0) return;
+            dragOrigin = { x: e.clientX, y: e.clientY };
+            dragStarted = false;
+          });
+          dragZone.addEventListener("mousemove", (e) => {
+            if (!dragOrigin || dragStarted || (e.buttons & 1) === 0) return;
+            const dx = Math.abs(e.clientX - dragOrigin.x);
+            const dy = Math.abs(e.clientY - dragOrigin.y);
+            if (dx > 3 || dy > 3) {
+              dragStarted = true;
+              dragOrigin = null;
+              void ipc("cmd_window_drag").catch(() => {});
+            }
+          });
+          window.addEventListener("mouseup", () => {
+            dragOrigin = null;
+            dragStarted = false;
+          });
+          dragZone.addEventListener("dblclick", () => {
+            void ipc("cmd_window_toggle_maximize").then(() => refreshAll().then(render)).catch(() => {});
+          });
+        }
 
-          card.appendChild(
-            el("div", { class: "unlock-head" }, [
-              makeLogoSvg(54),
-              el("h1", { text: "Anvil" }),
-              el("p", { text: subtitle }),
-            ]),
+        function renderTitlebar() {
+          const dragZone = el("div", { class: "titlebar-drag" });
+          attachWindowDragBehavior(dragZone);
+
+          const minBtn = el(
+            "button",
+            {
+              type: "button",
+              class: "win-btn",
+              title: "Réduire",
+              "aria-label": "Réduire",
+              onClick: () => void ipc("cmd_window_minimize").catch(() => {}),
+            },
+            [makeSvg("0 0 12 12", 12, 12, [{ _tag: "line", x1: "1", y1: "6", x2: "11", y2: "6", stroke: "currentColor", "stroke-width": "1.3" }])],
           );
 
-          const tabs = el("div", { class: "tabs" });
-          if (state.status.configured) {
-            tabs.appendChild(
-              el("button", {
-                type: "button",
-                class: state.authMode === "unlock" ? "active" : "",
-                text: "Déverrouiller",
-                onClick: () => {
-                  state.authMode = "unlock";
-                  render();
+          const maxBtn = el(
+            "button",
+            {
+              type: "button",
+              class: "win-btn",
+              title: state.chrome.is_maximized ? "Restaurer" : "Agrandir",
+              "aria-label": state.chrome.is_maximized ? "Restaurer" : "Agrandir",
+              onClick: () =>
+                void ipc("cmd_window_toggle_maximize")
+                  .then(() => refreshAll().then(render))
+                  .catch(() => {}),
+            },
+            [
+              state.chrome.is_maximized
+                ? makeSvg("0 0 12 12", 12, 12, [
+                    { _tag: "rect", x: "3", y: "1.5", width: "7.5", height: "7.5", stroke: "currentColor", "stroke-width": "1.2" },
+                    { d: "M1.5 3.5V10.5H8.5", stroke: "currentColor", "stroke-width": "1.2" },
+                  ])
+                : makeSvg("0 0 12 12", 12, 12, [
+                    { _tag: "rect", x: "1.8", y: "1.8", width: "8.4", height: "8.4", stroke: "currentColor", "stroke-width": "1.2" },
+                  ]),
+            ],
+          );
+
+          const closeBtn = el(
+            "button",
+            {
+              type: "button",
+              class: "win-btn close",
+              title: "Fermer",
+              "aria-label": "Fermer",
+              onClick: () => void ipc("cmd_window_close").catch(() => {}),
+            },
+            [
+              makeSvg("0 0 12 12", 12, 12, [
+                { _tag: "line", x1: "2", y1: "2", x2: "10", y2: "10", stroke: "currentColor", "stroke-width": "1.35" },
+                { _tag: "line", x1: "10", y1: "2", x2: "2", y2: "10", stroke: "currentColor", "stroke-width": "1.35" },
+              ]),
+            ],
+          );
+
+          return el("header", { class: "titlebar" }, [
+            el("div", { class: "titlebar-brand" }, [
+              makeLogoSvg(30),
+              el("span", { class: "titlebar-brand-name", text: "Anvil" }),
+            ]),
+            dragZone,
+            el("div", { class: "win-controls" }, [minBtn, maxBtn, closeBtn]),
+          ]);
+        }
+
+        function appendResizeHandles(root) {
+          if (state.chrome.is_maximized) return;
+          const dirs = [
+            ["north", "resize-n"],
+            ["south", "resize-s"],
+            ["east", "resize-e"],
+            ["west", "resize-w"],
+            ["north_west", "resize-nw"],
+            ["north_east", "resize-ne"],
+            ["south_west", "resize-sw"],
+            ["south_east", "resize-se"],
+          ];
+          for (const [direction, cls] of dirs) {
+            root.appendChild(
+              el("div", {
+                class: `resize-edge ${cls}`,
+                onMousedown: (e) => {
+                  if (e.button !== 0) return;
+                  e.preventDefault();
+                  void ipc("cmd_window_drag_resize", { direction }).catch(() => {});
                 },
               }),
             );
           }
-          tabs.appendChild(
-            el("button", {
-              type: "button",
-              class: state.authMode === "register" ? "active" : "",
-              text: "Créer un compte",
-              onClick: () => {
-                state.authMode = "register";
-                render();
-              },
-            }),
-          );
-          tabs.appendChild(
-            el("button", {
-              type: "button",
-              class: state.authMode === "login" ? "active" : "",
-              text: "Connexion",
-              onClick: () => {
-                state.authMode = "login";
-                render();
-              },
-            }),
-          );
-          card.appendChild(tabs);
+        }
 
-          const serverInput = el("input", {
+        function renderLogoutConfirmModal() {
+          const backdrop = el("div", {
+            class: "modal-backdrop",
+            onClick: (e) => {
+              if (e.target === backdrop && !state.busy) {
+                state.showLogoutConfirm = false;
+                render();
+              }
+            },
+          });
+
+          const dialog = el("div", { class: "confirm-modal" }, [
+            el("div", { class: "confirm-bang", text: "!" }),
+            el("h2", { style: { margin: "0 0 8px", fontSize: "19px", fontWeight: 700 }, text: "Se Deconnecter" }),
+            el("p", {
+              style: { margin: "0 0 22px", fontSize: "12.5px", color: "var(--text-secondary)" },
+              text: "Etes-Vous sur de vouloir vous deconnecter ?",
+            }),
+            el("button", {
+              type: "button",
+              class: "primary",
+              style: { width: "100%", padding: "10px 14px", marginBottom: "10px" },
+              disabled: state.busy,
+              text: "Se Deconnecter",
+              onClick: () =>
+                void runSafe(async () => {
+                  await ipc("cmd_logout");
+                  state.showLogoutConfirm = false;
+                  state.authMode = "login";
+                  state.authEmail = "";
+                  state.authInvite = "";
+                  await refreshAll();
+                }),
+            }),
+            el("button", {
+              type: "button",
+              class: "light",
+              style: { width: "100%", padding: "10px 14px" },
+              disabled: state.busy,
+              text: "Annuler",
+              onClick: () => {
+                state.showLogoutConfirm = false;
+                render();
+              },
+            }),
+          ]);
+
+          backdrop.appendChild(dialog);
+          return backdrop;
+        }
+
+        function renderAuthScreens() {
+          const card = el("div", { class: "auth-card" });
+
+          if (state.status.configured && state.authMode === "unlock") {
+            const picBox = el("div", { class: "auth-picture-box" });
+            if (state.status.avatar_data_url) {
+              picBox.appendChild(el("img", { src: state.status.avatar_data_url, alt: state.status.email || "Avatar" }));
+            } else {
+              picBox.appendChild(makeUserSilhouetteSvg(48));
+            }
+
+            card.appendChild(
+              el("div", { class: "auth-hero" }, [
+                picBox,
+                el("div", { class: "auth-email", text: state.status.email || "-" }),
+                el("div", { style: { marginTop: "6px", marginBottom: "4px" } }, [roleBadgeEl(state.status.role)]),
+                el("div", { class: "auth-url", text: state.status.server_url || "" }),
+              ]),
+            );
+
+            const pwInput = el("input", {
+              type: "password",
+              class: "auth-input",
+              placeholder: "MasterPassword",
+              autocomplete: "current-password",
+              required: true,
+            });
+
+            const form = el("form", {
+              onSubmit: (e) => {
+                e.preventDefault();
+                const pw = pwInput.value;
+                pwInput.value = "";
+                if (!pw) return;
+                void runSafe(async () => {
+                  await ipc("cmd_unlock_password", { masterPassword: pw });
+                  await refreshAll();
+                });
+              },
+            });
+
+            form.appendChild(
+              el("div", { class: "auth-field-wrap" }, [
+                el("label", { class: "auth-label", text: "MasterPassword" }),
+                pwInput,
+              ]),
+            );
+
+            form.appendChild(
+              el("button", {
+                type: "submit",
+                class: "primary auth-submit",
+                disabled: state.busy,
+                text: state.busy ? "Déverrouillage..." : "Unlock",
+              }),
+            );
+
+            if (state.status.biometric_available && state.status.biometric_enabled) {
+              form.appendChild(
+                el("button", {
+                  type: "button",
+                  class: "ghost",
+                  style: {
+                    width: "100%",
+                    marginTop: "9px",
+                    borderColor: "var(--border-strong)",
+                    background: "rgba(255,255,255,0.03)",
+                    fontWeight: 500,
+                  },
+                  disabled: state.busy,
+                  text: "Unlock with Windows Hello",
+                  onClick: () =>
+                    void runSafe(async () => {
+                      await ipc("cmd_unlock_biometric");
+                      await refreshAll();
+                    }),
+                }),
+              );
+            }
+
+            card.appendChild(form);
+            card.appendChild(el("div", { class: "auth-or", text: "or" }));
+            card.appendChild(
+              el("button", {
+                type: "button",
+                class: "light auth-submit",
+                disabled: state.busy,
+                text: "Login",
+                onClick: () => {
+                  state.showLogoutConfirm = true;
+                  render();
+                },
+              }),
+            );
+
+            return el("div", { class: "auth-stage" }, [card]);
+          }
+
+          const isRegister = state.authMode === "register";
+
+          const logoBox = el("div", {
+            class: "auth-picture-box",
+            style: { background: "#dcdce2", borderColor: "#464654" },
+          }, [makeLogoSvg(58)]);
+
+          card.appendChild(
+            el("div", { class: "auth-hero" }, [
+              logoBox,
+              el("p", {
+                class: "auth-subtitle",
+                text: isRegister
+                  ? "Créer un compte sur une instance Anvil"
+                  : "Connexion à une instance Anvil",
+              }),
+            ]),
+          );
+
+          card.appendChild(el("div", { class: "auth-section-title", text: isRegister ? "SignIn" : "Login" }));
+
+          const urlInput = el("input", {
             type: "url",
+            class: "auth-input",
             value: state.authServerUrl,
-            placeholder: "http://127.0.0.1:18420",
+            placeholder: "URL (ex: http://100.65.1.0:8080)",
+            style: { paddingRight: DEFAULT_SERVER_URL ? "60px" : "12px" },
+            required: true,
             onInput: (e) => {
               state.authServerUrl = e.target.value;
             },
           });
+
           const emailInput = el("input", {
             type: "email",
+            class: "auth-input",
             value: state.authEmail,
-            placeholder: "vous@exemple.com",
+            placeholder: "Email",
+            required: true,
             onInput: (e) => {
               state.authEmail = e.target.value;
             },
           });
+
           const pwInput = el("input", {
             type: "password",
-            placeholder: "Master Password",
+            class: "auth-input",
+            placeholder: "Password",
+            autocomplete: isRegister ? "new-password" : "current-password",
             required: true,
           });
+
           const inviteInput = el("input", {
             type: "text",
+            class: "auth-input mono",
             value: state.authInvite,
-            placeholder: "Optionnel (non requis en local)",
+            placeholder: "Invite Token (optionnel)",
             onInput: (e) => {
               state.authInvite = e.target.value;
             },
@@ -1089,9 +1695,7 @@
               pwInput.value = "";
               if (!pw) return;
               void runSafe(async () => {
-                if (state.authMode === "unlock") {
-                  await ipc("cmd_unlock_password", { masterPassword: pw });
-                } else if (state.authMode === "register") {
+                if (isRegister) {
                   await ipc("cmd_register", {
                     serverUrl: state.authServerUrl.trim(),
                     email: state.authEmail.trim(),
@@ -1110,58 +1714,58 @@
             },
           });
 
-          if (state.authMode !== "unlock") {
-            form.appendChild(el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "URL du serveur Anvil" }), serverInput]));
-            form.appendChild(el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "Adresse email" }), emailInput]));
-          } else {
-            form.appendChild(
-              el("div", { class: "field-box", style: { marginBottom: "12px" } }, [
-                el("div", { class: "field-name", text: "Compte configuré" }),
-                el("div", { text: state.status.email || "-" }),
-                el("div", { style: { fontSize: "11.5px", color: "var(--text-secondary)" }, text: state.status.server_url || "" }),
-              ]),
+          const urlWrap = el("div", { class: "auth-field-wrap" }, [urlInput]);
+          if (DEFAULT_SERVER_URL) {
+            urlWrap.appendChild(
+              el("button", {
+                type: "button",
+                class: "auth-inline-chip",
+                title: `Remplir avec le serveur local (${DEFAULT_SERVER_URL})`,
+                text: "Local",
+                onClick: () => {
+                  state.authServerUrl = DEFAULT_SERVER_URL;
+                  urlInput.value = DEFAULT_SERVER_URL;
+                  emailInput.focus();
+                },
+              }),
             );
           }
 
-          form.appendChild(el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "Master Password" }), pwInput]));
-
-          if (state.authMode === "register") {
-            form.appendChild(el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "Jeton d'invitation" }), inviteInput]));
+          form.appendChild(urlWrap);
+          form.appendChild(el("div", { class: "auth-field-wrap" }, [emailInput]));
+          form.appendChild(el("div", { class: "auth-field-wrap" }, [pwInput]));
+          if (isRegister) {
+            form.appendChild(el("div", { class: "auth-field-wrap" }, [inviteInput]));
           }
 
           form.appendChild(
             el("button", {
               type: "submit",
-              class: "primary",
-              style: { width: "100%", marginTop: "6px" },
+              class: "primary auth-submit",
               disabled: state.busy,
-              text:
-                state.authMode === "unlock"
-                  ? "Déverrouiller le coffre"
-                  : state.authMode === "register"
-                    ? "Créer le coffre Zero-Knowledge"
-                    : "Se connecter et synchroniser",
+              text: state.busy ? "Connexion..." : isRegister ? "SignIn" : "Login",
             }),
           );
 
-          if (state.authMode === "unlock" && state.status.biometric_available && state.status.biometric_enabled) {
-            form.appendChild(
+          card.appendChild(form);
+          card.appendChild(
+            el("div", { class: "auth-footer-link" }, [
+              el("span", { text: isRegister ? "Already have an account ?" : "No account ?" }),
               el("button", {
                 type: "button",
-                style: { width: "100%", marginTop: "8px" },
+                class: "link-btn",
                 disabled: state.busy,
-                text: "Déverrouiller via Windows DPAPI",
-                onClick: () =>
-                  void runSafe(async () => {
-                    await ipc("cmd_unlock_biometric");
-                    await refreshAll();
-                  }),
+                text: isRegister ? "Login" : "SignIn",
+                onClick: () => {
+                  state.error = null;
+                  state.authMode = isRegister ? "login" : "register";
+                  render();
+                },
               }),
-            );
-          }
+            ]),
+          );
 
-          card.appendChild(form);
-          return el("div", { class: "unlock-screen" }, [card]);
+          return el("div", { class: "auth-stage" }, [card]);
         }
 
         function renderEditor() {
@@ -1268,7 +1872,7 @@
               el("input", {
                 type: "text",
                 value: f.title,
-                placeholder: "Ex. GitHub, Gmail, Serveur Proxmox...",
+                placeholder: "Ex. GitHub, Gmail, Serveur...",
                 onInput: (e) => {
                   f.title = e.target.value;
                 },
@@ -1531,7 +2135,7 @@
           const item = state.selectedItem;
           if (!item) {
             return el("div", { class: "empty-state" }, [
-              makeLogoSvg(48),
+              makeLogoSvg(52),
               el("h3", { text: "Aucune fiche sélectionnée" }),
               el("p", {
                 text: "Sélectionnez une fiche dans la liste ou cliquez sur « + Nouvelle fiche » (Ctrl+N).",
@@ -1542,7 +2146,7 @@
           const card = el("div", { class: "detail-card" });
           const avatar = el("div", {
             class: "avatar",
-            style: { background: item.logo?.fallback_color || "#E07A2F" },
+            style: { background: item.logo?.fallback_color || "#7C6DFA" },
           });
           if (item.logo?.data_url) {
             avatar.appendChild(el("img", { src: item.logo.data_url, alt: item.title }));
@@ -1562,11 +2166,22 @@
             style: { display: "none" },
             onChange: async (e) => {
               const file = e.target.files?.[0];
+              e.target.value = "";
               if (!file) return;
+              if (file.size > MAX_AVATAR_BYTES) {
+                state.error = "L'image sélectionnée dépasse la taille maximale de 5 Mo.";
+                render();
+                return;
+              }
               const buf = await file.arrayBuffer();
-              const bytes = Array.from(new Uint8Array(buf));
+              const u8 = new Uint8Array(buf);
+              if (!hasValidImageMagicBytes(u8)) {
+                state.error = "Fichier refusé : seule une image PNG, JPEG ou WebP valide est acceptée.";
+                render();
+                return;
+              }
               void runSafe(async () => {
-                const updated = await ipc("cmd_upload_item_logo", { itemId: item.id, bytes });
+                const updated = await ipc("cmd_upload_item_logo", { itemId: item.id, bytes: Array.from(u8) });
                 state.selectedItem = updated;
                 await refreshAll(updated.id);
               });
@@ -1672,7 +2287,7 @@
           if (item.login) {
             if (item.login.username) {
               card.appendChild(
-                el("div", { class: "field-box" }, [
+                el("div", { class: "field-box selectable" }, [
                   el("div", { class: "field-row" }, [
                     el("div", {}, [
                       el("div", { class: "field-name", text: "Nom d'utilisateur" }),
@@ -1690,7 +2305,7 @@
 
             if (item.login.email) {
               card.appendChild(
-                el("div", { class: "field-box" }, [
+                el("div", { class: "field-box selectable" }, [
                   el("div", { class: "field-row" }, [
                     el("div", {}, [
                       el("div", { class: "field-name", text: "Email" }),
@@ -1716,7 +2331,7 @@
               el("div", { class: "field-row" }, [
                 el("div", {}, [
                   el("div", { class: "field-name", text: "Mot de passe" }),
-                  el("div", { class: "field-value mono", text: pwVal }),
+                  el("div", { class: "field-value mono selectable", text: pwVal }),
                 ]),
                 el("div", { class: "row-actions" }, [
                   el("button", {
@@ -1759,7 +2374,7 @@
                     el("div", { class: "field-name", text: "Code 2FA (TOTP)" }),
                     el("div", {
                       id: "live-totp-code",
-                      class: "totp-code",
+                      class: "totp-code selectable",
                       text: state.totp ? formatTotpCode(state.totp.code) : "••••••",
                     }),
                   ]),
@@ -1781,7 +2396,7 @@
             }
 
             if (item.login.uris?.length) {
-              const uriCard = el("div", { class: "field-box" }, [el("div", { class: "field-name", text: "Sites Web" })]);
+              const uriCard = el("div", { class: "field-box selectable" }, [el("div", { class: "field-name", text: "Sites Web" })]);
               item.login.uris.forEach((u) => {
                 uriCard.appendChild(
                   el("div", { class: "field-row", style: { marginTop: "6px" } }, [
@@ -1822,7 +2437,7 @@
           }
 
           if (item.custom_fields?.length) {
-            const cfCard = el("div", { class: "field-box" }, [el("div", { class: "field-name", text: "Champs personnalisés" })]);
+            const cfCard = el("div", { class: "field-box selectable" }, [el("div", { class: "field-name", text: "Champs personnalisés" })]);
             item.custom_fields.forEach((c) => {
               cfCard.appendChild(
                 el("div", { class: "field-row", style: { marginTop: "6px" } }, [
@@ -1843,7 +2458,7 @@
 
           if (item.notes) {
             card.appendChild(
-              el("div", { class: "field-box" }, [
+              el("div", { class: "field-box selectable" }, [
                 el("div", { class: "field-name", text: "Notes" }),
                 el("div", { style: { whiteSpace: "pre-wrap" }, text: item.notes }),
               ]),
@@ -1851,6 +2466,11 @@
           }
 
           return card;
+        }
+
+        async function generatePreview() {
+          state.genResult = await ipc("cmd_generate_password", { options: state.genOpts });
+          render();
         }
 
         function renderGeneratorModal() {
@@ -1898,7 +2518,7 @@
             modal.appendChild(
               el("div", { class: "field-box" }, [
                 el("div", { class: "field-row" }, [
-                  el("div", { class: "mono", style: { fontSize: "15px", wordBreak: "break-all" }, text: state.genResult.value }),
+                  el("div", { class: "mono selectable", style: { fontSize: "15px", wordBreak: "break-all" }, text: state.genResult.value }),
                   el("button", {
                     type: "button",
                     class: "primary",
@@ -1999,11 +2619,6 @@
           return el("div", { class: "modal-backdrop" }, [modal]);
         }
 
-        async function generatePreview() {
-          state.genResult = await ipc("cmd_generate_password", { options: state.genOpts });
-          render();
-        }
-
         function renderImportExportModal() {
           const modal = el("div", { class: "modal" });
           modal.appendChild(
@@ -2081,11 +2696,7 @@
                       state.modal = null;
                       state.error = null;
                       await refreshAll();
-                      state.toast = {
-                        label: `Import terminé : ${rep.created} créées, ${rep.merged} fusionnées`,
-                        clear_after_seconds: 8,
-                        expires_at_ms: Date.now() + 8000,
-                      };
+                      showToast(`Import terminé : ${rep.created} créées, ${rep.merged} fusionnées`, 8);
                     }),
                 }),
               ]),
@@ -2195,11 +2806,11 @@
           return el("div", { class: "modal-backdrop" }, [modal]);
         }
 
-        function renderSecurityModal() {
+        function renderAccountModal() {
           const modal = el("div", { class: "modal" });
           modal.appendChild(
             el("div", { class: "modal-header" }, [
-              el("h2", { text: "Sécurité & Master Password" }),
+              el("h2", { text: "Mon Compte & Sécurité" }),
               el("button", {
                 type: "button",
                 text: "Fermer",
@@ -2211,67 +2822,306 @@
             ]),
           );
 
-          const curPw = el("input", { type: "password", placeholder: "Mot de passe actuel", required: true });
-          const nextPw = el("input", { type: "password", placeholder: "Nouveau Master Password", required: true });
-          const confirmPw = el("input", { type: "password", placeholder: "Confirmer le nouveau", required: true });
-          const revokeOther = el("input", { type: "checkbox", checked: true });
+          modal.appendChild(
+            el("div", { class: "tabs" }, [
+              ["profile", "Profil & Photo"],
+              ["email", "Email"],
+              ["password", "Master Password"],
+              ["hello", "Windows Hello"],
+            ].map(([tab, label]) =>
+              el("button", {
+                type: "button",
+                class: state.accountTab === tab ? "active" : "",
+                text: label,
+                onClick: () => {
+                  state.accountTab = tab;
+                  render();
+                },
+              }),
+            )),
+          );
 
-          const form = el(
-            "form",
-            {
-              onSubmit: (e) => {
-                e.preventDefault();
-                const current = curPw.value;
-                const next = nextPw.value;
-                const confirm = confirmPw.value;
-                curPw.value = "";
-                nextPw.value = "";
-                confirmPw.value = "";
-                if (!current || !next) return;
-                if (next !== confirm) {
-                  state.error = "Les deux nouveaux mots de passe ne correspondent pas.";
+          if (state.accountTab === "profile") {
+            const avatarPreview = el("div", {
+              class: "auth-picture-box",
+              style: { width: "76px", height: "76px", marginBottom: 0, flexShrink: 0 },
+            });
+            if (state.status.avatar_data_url) {
+              avatarPreview.appendChild(el("img", { src: state.status.avatar_data_url, alt: "Avatar" }));
+            } else {
+              avatarPreview.appendChild(makeUserSilhouetteSvg(38));
+            }
+
+            const avatarInput = el("input", {
+              type: "file",
+              accept: "image/png,image/jpeg,image/webp",
+              style: { display: "none" },
+              onChange: async (e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (!file) return;
+                if (file.size > MAX_AVATAR_BYTES) {
+                  state.error = "La photo dépasse la taille maximale de 5 Mo.";
+                  render();
+                  return;
+                }
+                const allowedMime = ["image/png", "image/jpeg", "image/webp"];
+                if (file.type && !allowedMime.includes(file.type)) {
+                  state.error = "Format invalide : uniquement PNG, JPEG ou WebP.";
+                  render();
+                  return;
+                }
+                const buf = await file.arrayBuffer();
+                const u8 = new Uint8Array(buf);
+                if (!hasValidImageMagicBytes(u8)) {
+                  state.error = "Image rejetée par sécurité : signature binaire PNG/JPEG/WebP invalide.";
                   render();
                   return;
                 }
                 void runSafe(async () => {
-                  await ipc("cmd_rotate_password", {
-                    currentPassword: current,
-                    newPassword: next,
-                    revokeOtherSessions: revokeOther.checked,
-                  });
-                  state.modal = null;
+                  await ipc("cmd_upload_avatar", { bytes: Array.from(u8) });
                   await refreshAll();
-                  state.toast = {
-                    label: "Master Password mis à jour",
-                    clear_after_seconds: 8,
-                    expires_at_ms: Date.now() + 8000,
-                  };
+                  showToast("Photo de profil mise à jour");
                 });
               },
-            },
-            [
-              el("p", {
-                style: { color: "var(--text-secondary)", fontSize: "12.5px", marginTop: 0 },
-                text: "Enveloppe à nouveau votre VaultKey côté client et met à jour l'authentification sur le serveur.",
-              }),
-              el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "Master Password actuel" }), curPw]),
-              el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "Nouveau Master Password" }), nextPw]),
-              el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "Confirmer le nouveau Master Password" }), confirmPw]),
-              el("label", { style: { display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px", cursor: "pointer" } }, [
-                revokeOther,
-                "Révoquer toutes les autres sessions actives",
-              ]),
-              el("button", {
-                type: "submit",
-                class: "primary",
-                style: { width: "100%" },
-                disabled: state.busy,
-                text: "Mettre à jour le Master Password",
-              }),
-            ],
-          );
+            });
 
-          modal.appendChild(form);
+            modal.appendChild(
+              el("div", { class: "field-box" }, [
+                el("div", { style: { display: "flex", alignItems: "center", gap: "16px" } }, [
+                  avatarPreview,
+                  el("div", { style: { minWidth: 0, flex: 1 } }, [
+                    el("div", { style: { display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" } }, [
+                      el("span", { style: { fontWeight: 700, fontSize: "14.5px", wordBreak: "break-all" }, text: state.status.email || "-" }),
+                      roleBadgeEl(state.status.role),
+                    ]),
+                    el("div", { style: { fontSize: "12px", color: "var(--text-secondary)", marginTop: "3px" }, text: state.status.server_url || "" }),
+                    el("div", { class: "row-actions", style: { marginTop: "10px", flexWrap: "wrap" } }, [
+                      avatarInput,
+                      el("button", {
+                        type: "button",
+                        class: "primary",
+                        disabled: state.busy,
+                        text: "Changer la photo",
+                        onClick: () => avatarInput.click(),
+                      }),
+                      state.status.avatar_data_url
+                        ? el("button", {
+                            type: "button",
+                            class: "danger",
+                            disabled: state.busy,
+                            text: "Supprimer",
+                            onClick: () =>
+                              void runSafe(async () => {
+                                await ipc("cmd_delete_avatar");
+                                await refreshAll();
+                                showToast("Photo supprimée");
+                              }),
+                          })
+                        : null,
+                    ]),
+                  ]),
+                ]),
+                el("p", {
+                  style: { margin: "10px 0 0", fontSize: "11.5px", color: "var(--text-muted)" },
+                  text: "Vérification stricte PNG/JPEG/WebP, recadrage 256×256 et suppression complète des métadonnées EXIF côté client et serveur.",
+                }),
+              ]),
+            );
+
+            modal.appendChild(
+              el("div", { class: "field-box" }, [
+                el("div", { class: "field-row" }, [
+                  el("div", {}, [
+                    el("div", { style: { fontWeight: 600 }, text: "Session du compte" }),
+                    el("div", { style: { fontSize: "12px", color: "var(--text-secondary)" }, text: "Déconnecte ce poste et efface le cache local chiffré." }),
+                  ]),
+                  el("button", {
+                    type: "button",
+                    class: "danger",
+                    disabled: state.busy,
+                    text: "Se déconnecter",
+                    onClick: () => {
+                      state.modal = null;
+                      state.showLogoutConfirm = true;
+                      render();
+                    },
+                  }),
+                ]),
+              ]),
+            );
+          } else if (state.accountTab === "email") {
+            const newEmailInput = el("input", {
+              type: "email",
+              placeholder: state.status.email || "nouveau@exemple.com",
+              required: true,
+            });
+            const curPwInput = el("input", {
+              type: "password",
+              placeholder: "Master Password actuel",
+              required: true,
+            });
+
+            modal.appendChild(
+              el("form", {
+                onSubmit: (e) => {
+                  e.preventDefault();
+                  const nextEmail = newEmailInput.value.trim();
+                  const pw = curPwInput.value;
+                  curPwInput.value = "";
+                  if (!nextEmail || !pw) return;
+                  void runSafe(async () => {
+                    await ipc("cmd_change_email", {
+                      currentPassword: pw,
+                      newEmail: nextEmail,
+                    });
+                    state.modal = null;
+                    await refreshAll();
+                    showToast("Adresse email mise à jour");
+                  });
+                },
+              }, [
+                el("div", { class: "field-box" }, [
+                  el("div", { class: "field-name", text: "Email actuel" }),
+                  el("div", { text: state.status.email || "-" }),
+                ]),
+                el("div", { class: "form-group" }, [
+                  el("label", { class: "form-label", text: "Nouvelle adresse email" }),
+                  newEmailInput,
+                ]),
+                el("div", { class: "form-group" }, [
+                  el("label", { class: "form-label", text: "Confirmation Master Password" }),
+                  curPwInput,
+                ]),
+                el("button", {
+                  type: "submit",
+                  class: "primary",
+                  style: { width: "100%" },
+                  disabled: state.busy,
+                  text: "Enregistrer le nouvel email",
+                }),
+              ]),
+            );
+          } else if (state.accountTab === "password") {
+            const curPw = el("input", { type: "password", placeholder: "Master Password actuel", required: true });
+            const nextPw = el("input", { type: "password", placeholder: "Nouveau Master Password", required: true });
+            const confirmPw = el("input", { type: "password", placeholder: "Confirmer le nouveau", required: true });
+            const revokeOther = el("input", { type: "checkbox", checked: true });
+
+            modal.appendChild(
+              el("form", {
+                onSubmit: (e) => {
+                  e.preventDefault();
+                  const current = curPw.value;
+                  const next = nextPw.value;
+                  const confirm = confirmPw.value;
+                  curPw.value = "";
+                  nextPw.value = "";
+                  confirmPw.value = "";
+                  if (!current || !next) return;
+                  if (next !== confirm) {
+                    state.error = "Les deux nouveaux mots de passe ne correspondent pas.";
+                    render();
+                    return;
+                  }
+                  void runSafe(async () => {
+                    await ipc("cmd_rotate_password", {
+                      currentPassword: current,
+                      newPassword: next,
+                      revokeOtherSessions: revokeOther.checked,
+                    });
+                    state.modal = null;
+                    await refreshAll();
+                    showToast("Master Password mis à jour");
+                  });
+                },
+              }, [
+                el("p", {
+                  style: { color: "var(--text-secondary)", fontSize: "12.5px", marginTop: 0 },
+                  text: "Enveloppe à nouveau votre clé de coffre côté client et met à jour l'authentification sur le serveur.",
+                }),
+                el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "Master Password actuel" }), curPw]),
+                el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "Nouveau Master Password" }), nextPw]),
+                el("div", { class: "form-group" }, [el("label", { class: "form-label", text: "Confirmer le nouveau Master Password" }), confirmPw]),
+                el("label", { style: { display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px", cursor: "pointer" } }, [
+                  revokeOther,
+                  "Révoquer toutes les autres sessions actives",
+                ]),
+                el("button", {
+                  type: "submit",
+                  class: "primary",
+                  style: { width: "100%" },
+                  disabled: state.busy,
+                  text: "Mettre à jour le Master Password",
+                }),
+              ]),
+            );
+          } else if (state.accountTab === "hello") {
+            const box = el("div", { class: "field-box" });
+            if (!state.status.biometric_available) {
+              box.appendChild(
+                el("p", {
+                  style: { margin: 0, color: "var(--text-secondary)" },
+                  text: "Windows Hello n'est pas disponible ou pas encore configuré dans les paramètres Windows de cet appareil.",
+                }),
+              );
+            } else if (state.status.biometric_enabled) {
+              box.appendChild(
+                el("p", {
+                  style: { margin: "0 0 12px", color: "var(--text-secondary)" },
+                  text: "Windows Hello est actif : le déverrouillage rapide exige une vérification PIN, empreinte, visage ou mot de passe Windows.",
+                }),
+              );
+              box.appendChild(
+                el("button", {
+                  type: "button",
+                  class: "danger",
+                  disabled: state.busy,
+                  text: "Désactiver Windows Hello",
+                  onClick: () =>
+                    void runSafe(async () => {
+                      await ipc("cmd_disable_biometric");
+                      await refreshAll();
+                      showToast("Windows Hello désactivé");
+                    }),
+                }),
+              );
+            } else {
+              const helloPw = el("input", { type: "password", placeholder: "Confirmez votre Master Password", required: true });
+              box.appendChild(
+                el("p", {
+                  style: { margin: "0 0 12px", color: "var(--text-secondary)" },
+                  text: "Protège la clé locale sous Windows Hello : votre identité Windows (PIN / biométrie / mot de passe PC) est requise à chaque déverrouillage.",
+                }),
+              );
+              box.appendChild(
+                el("form", {
+                  onSubmit: (e) => {
+                    e.preventDefault();
+                    const pw = helloPw.value;
+                    helloPw.value = "";
+                    if (!pw) return;
+                    void runSafe(async () => {
+                      await ipc("cmd_enable_biometric", { masterPassword: pw });
+                      await refreshAll();
+                      showToast("Windows Hello activé");
+                    });
+                  },
+                }, [
+                  el("div", { class: "form-group" }, [helloPw]),
+                  el("button", {
+                    type: "submit",
+                    class: "primary",
+                    style: { width: "100%" },
+                    disabled: state.busy,
+                    text: "Activer Windows Hello",
+                  }),
+                ]),
+              );
+            }
+            modal.appendChild(box);
+          }
+
           return el("div", { class: "modal-backdrop" }, [modal]);
         }
 
@@ -2364,56 +3214,44 @@
             );
           });
 
-          const footer = el("div", { class: "sidebar-footer" }, [
-            el("div", { style: { fontWeight: 600, color: "var(--text-primary)" }, text: state.status.email || "Hors-ligne" }),
-            el("div", { style: { fontSize: "11px", marginBottom: "8px" }, text: `Synchro r${state.status.sync_revision}` }),
-          ]);
-
-          if (state.status.biometric_available && !state.status.biometric_enabled) {
-            if (!state.showBiometricPrompt) {
-              footer.appendChild(
-                el("button", {
-                  type: "button",
-                  style: { width: "100%", fontSize: "12px" },
-                  text: "Activer Windows DPAPI",
-                  onClick: () => {
-                    state.showBiometricPrompt = true;
-                    render();
-                  },
-                }),
-              );
-            } else {
-              const bioPw = el("input", { type: "password", placeholder: "Confirmez Master Password" });
-              footer.appendChild(
-                el("form", {
-                  onSubmit: (e) => {
-                    e.preventDefault();
-                    const pw = bioPw.value;
-                    bioPw.value = "";
-                    if (!pw) return;
-                    void runSafe(async () => {
-                      await ipc("cmd_enable_biometric", { masterPassword: pw });
-                      state.showBiometricPrompt = false;
-                      await refreshAll();
-                    });
-                  },
-                }, [
-                  bioPw,
-                  el("div", { class: "row-actions", style: { marginTop: "6px" } }, [
-                    el("button", { type: "submit", class: "primary", style: { flex: 1 }, text: "Activer" }),
-                    el("button", {
-                      type: "button",
-                      text: "Annuler",
-                      onClick: () => {
-                        state.showBiometricPrompt = false;
-                        render();
-                      },
-                    }),
-                  ]),
-                ]),
-              );
-            }
+          const chipAvatar = el("div", { class: "account-chip-avatar" });
+          if (state.status.avatar_data_url) {
+            chipAvatar.appendChild(el("img", { src: state.status.avatar_data_url, alt: "Avatar" }));
+          } else {
+            chipAvatar.textContent = (state.status.email || "A").slice(0, 2).toUpperCase();
           }
+
+          const footer = el("div", { class: "sidebar-footer" }, [
+            el("div", { class: "account-chip" }, [
+              chipAvatar,
+              el("div", { style: { minWidth: 0, flex: 1 } }, [
+                el("div", {
+                  style: {
+                    fontWeight: 600,
+                    color: "var(--text-primary)",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  },
+                  text: state.status.email || "Hors-ligne",
+                }),
+                el("div", { style: { display: "flex", alignItems: "center", gap: "6px", marginTop: "3px" } }, [
+                  roleBadgeEl(state.status.role),
+                  el("span", { style: { fontSize: "11px", color: "var(--text-muted)" }, text: `r${state.status.sync_revision}` }),
+                ]),
+              ]),
+            ]),
+            el("button", {
+              type: "button",
+              style: { width: "100%", fontSize: "12px" },
+              text: "Mon Compte & Photo",
+              onClick: () => {
+                state.accountTab = "profile";
+                state.modal = "account";
+                render();
+              },
+            }),
+          ]);
           sidebar.appendChild(footer);
 
           const visibleItems =
@@ -2448,7 +3286,7 @@
           } else {
             visibleItems.forEach((item) => {
               const active = item.id === state.selectedItemId && !state.editing;
-              const av = el("div", { class: "avatar", style: { background: item.fallback_color || "#E07A2F" }, text: item.fallback_initials });
+              const av = el("div", { class: "avatar", style: { background: item.fallback_color || "#7C6DFA" }, text: item.fallback_initials });
               listPane.appendChild(
                 el("div", {
                   role: "button",
@@ -2497,6 +3335,92 @@
           return el("div", { class: "workspace" }, [sidebar, listPane, detailPane]);
         }
 
+        function renderWorkspaceBar() {
+          const searchInput = el("input", {
+            id: "global-search",
+            type: "search",
+            value: state.searchQuery,
+            placeholder: "Rechercher dans le coffre...",
+            onInput: (e) => {
+              state.searchQuery = e.target.value;
+              void refreshAll().then(render);
+            },
+          });
+
+          return el("div", { class: "workspace-bar" }, [
+            el("div", { class: "search-wrap" }, [searchInput, el("span", { class: "kbd-hint", text: "Ctrl+K" })]),
+            el("div", { class: "topbar-actions" }, [
+              el("button", {
+                type: "button",
+                class: "primary",
+                text: "+ Nouvelle fiche",
+                onClick: () => beginEdit(null),
+              }),
+              el("button", {
+                type: "button",
+                text: "Générateur",
+                onClick: () => {
+                  state.modal = "generator";
+                  void generatePreview();
+                },
+              }),
+              el("button", {
+                type: "button",
+                text: "Import / Export",
+                onClick: () => {
+                  state.modal = "import";
+                  render();
+                },
+              }),
+              el("button", {
+                type: "button",
+                text: "Compte",
+                onClick: () => {
+                  state.accountTab = "profile";
+                  state.modal = "account";
+                  render();
+                },
+              }),
+              state.status.pending_conflicts > 0
+                ? el("button", {
+                    type: "button",
+                    class: "danger",
+                    text: `Conflits (${state.status.pending_conflicts})`,
+                    onClick: () => {
+                      state.modal = "conflicts";
+                      render();
+                    },
+                  })
+                : null,
+              el("button", {
+                type: "button",
+                disabled: state.syncing || state.busy,
+                text: state.syncing ? "Synchro..." : `Synchroniser (r${state.status.sync_revision})`,
+                onClick: () =>
+                  void runSafe(async () => {
+                    state.syncing = true;
+                    render();
+                    try {
+                      await ipc("cmd_sync");
+                      await refreshAll();
+                    } finally {
+                      state.syncing = false;
+                    }
+                  }),
+              }),
+              el("button", {
+                type: "button",
+                text: "Verrouiller",
+                onClick: () =>
+                  void runSafe(async () => {
+                    await ipc("cmd_lock");
+                    await refreshAll();
+                  }),
+              }),
+            ]),
+          ]);
+        }
+
         function render() {
           const root = document.getElementById("app");
           if (!root) return;
@@ -2505,101 +3429,12 @@
           const searchSelStart = wasSearchFocused ? activeEl.selectionStart : null;
           root.replaceChildren();
 
-          const searchInput = el("input", {
-            id: "global-search",
-            type: "search",
-            value: state.searchQuery,
-            placeholder: "Rechercher dans le coffre...",
-            disabled: !state.status.unlocked,
-            onInput: (e) => {
-              state.searchQuery = e.target.value;
-              if (state.status.unlocked) {
-                void refreshAll().then(render);
-              }
-            },
-          });
+          appendResizeHandles(root);
+          root.appendChild(renderTitlebar());
 
-          const topbar = el("header", { class: "topbar" }, [
-            el("div", { class: "brand" }, [
-              makeLogoSvg(24),
-              el("span", { text: "Anvil" }),
-              el("span", { class: "brand-tag", text: "Zero-Knowledge" }),
-            ]),
-            state.status.unlocked
-              ? el("div", { class: "search-wrap" }, [searchInput, el("span", { class: "kbd-hint", text: "Ctrl+K" })])
-              : el("div", { style: { flex: 1 } }),
-            state.status.unlocked
-              ? el("div", { class: "topbar-actions" }, [
-                  el("button", {
-                    type: "button",
-                    class: "primary",
-                    text: "+ Nouvelle fiche",
-                    onClick: () => beginEdit(null),
-                  }),
-                  el("button", {
-                    type: "button",
-                    text: "Générateur",
-                    onClick: () => {
-                      state.modal = "generator";
-                      void generatePreview();
-                    },
-                  }),
-                  el("button", {
-                    type: "button",
-                    text: "Import / Export",
-                    onClick: () => {
-                      state.modal = "import";
-                      render();
-                    },
-                  }),
-                  el("button", {
-                    type: "button",
-                    text: "Sécurité",
-                    onClick: () => {
-                      state.modal = "security";
-                      render();
-                    },
-                  }),
-                  state.status.pending_conflicts > 0
-                    ? el("button", {
-                        type: "button",
-                        class: "danger",
-                        text: `Conflits (${state.status.pending_conflicts})`,
-                        onClick: () => {
-                          state.modal = "conflicts";
-                          render();
-                        },
-                      })
-                    : null,
-                  el("button", {
-                    type: "button",
-                    disabled: state.syncing || state.busy,
-                    text: state.syncing ? "Synchro..." : `Synchroniser (r${state.status.sync_revision})`,
-                    onClick: () =>
-                      void runSafe(async () => {
-                        state.syncing = true;
-                        render();
-                        try {
-                          await ipc("cmd_sync");
-                          await refreshAll();
-                        } finally {
-                          state.syncing = false;
-                        }
-                      }),
-                  }),
-                  el("button", {
-                    type: "button",
-                    text: "Verrouiller",
-                    onClick: () =>
-                      void runSafe(async () => {
-                        await ipc("cmd_lock");
-                        await refreshAll();
-                      }),
-                  }),
-                ])
-              : null,
-          ]);
-          root.appendChild(topbar);
+          if (state.status.unlocked) {
+            root.appendChild(renderWorkspaceBar());
+          }
 
           if (state.error) {
             root.appendChild(
@@ -2618,22 +3453,22 @@
             );
           }
 
-          root.appendChild(state.status.unlocked ? renderWorkspace() : renderUnlockScreen());
+          root.appendChild(state.status.unlocked ? renderWorkspace() : renderAuthScreens());
 
+          if (state.showLogoutConfirm) root.appendChild(renderLogoutConfirmModal());
           if (state.modal === "generator") root.appendChild(renderGeneratorModal());
           if (state.modal === "import") root.appendChild(renderImportExportModal());
           if (state.modal === "conflicts") root.appendChild(renderConflictsModal());
-          if (state.modal === "security") root.appendChild(renderSecurityModal());
+          if (state.modal === "account") root.appendChild(renderAccountModal());
 
           if (state.toast) {
             const rem = Math.max(0, Math.ceil((state.toast.expires_at_ms - Date.now()) / 1000));
             root.appendChild(
               el("div", { class: "toast" }, [
                 el("div", { class: "field-row" }, [
-                  el("span", { style: { fontWeight: 600 }, text: `${state.toast.label} copié` }),
-                  el("span", { id: "clipboard-toast-sec", class: "mono", style: { color: "var(--accent-copper)" }, text: `${rem} s` }),
+                  el("span", { style: { fontWeight: 600 }, text: state.toast.label }),
+                  el("span", { id: "clipboard-toast-sec", class: "mono", style: { color: "var(--accent)" }, text: `${rem} s` }),
                 ]),
-                el("div", { style: { fontSize: "11.5px", color: "var(--text-secondary)", marginTop: "3px" }, text: "Nettoyage automatique du presse-papiers actif." }),
               ]),
             );
           }
@@ -2650,7 +3485,7 @@
         }
 
         window.addEventListener("keydown", (e) => {
-          if (e.ctrlKey && e.key.toLowerCase() === "k") {
+          if (e.ctrlKey && e.key.toLowerCase() === "k" && state.status.unlocked) {
             e.preventDefault();
             document.getElementById("global-search")?.focus();
           } else if (e.ctrlKey && e.key.toLowerCase() === "n" && state.status.unlocked) {
@@ -2663,7 +3498,10 @@
               await refreshAll();
             });
           } else if (e.key === "Escape") {
-            if (state.modal) {
+            if (state.showLogoutConfirm) {
+              state.showLogoutConfirm = false;
+              render();
+            } else if (state.modal) {
               state.modal = null;
               render();
             } else if (state.editing) {

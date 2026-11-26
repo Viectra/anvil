@@ -13,6 +13,8 @@ use anvil_core::crypto::fill_random_bytes;
 use anvil_desktop::biometric::default_biometric_provider;
 use anvil_desktop::clipboard::SecureClipboardManager;
 use anvil_desktop::commands::DesktopCommandHost;
+#[cfg(target_os = "windows")]
+use anvil_desktop::commands::{NativeWindowAction, WindowResizeEdge};
 use anvil_desktop::embedded_server::{DEFAULT_EMBEDDED_SERVER_PORT, start_embedded_server};
 use anvil_desktop::http_bridge::spawn_embedded_ui_bridge;
 use anvil_desktop::platform::windows::OsSessionLockMonitor;
@@ -51,16 +53,16 @@ fn build_anvil_window_icon() -> Option<tao::window::Icon> {
     for y in 0..SIZE {
         for x in 0..SIZE {
             let (r, g, b, a) = if (10..=12).contains(&y) && (6..=25).contains(&x) {
-                (224u8, 122u8, 47u8, 255u8)
+                (124u8, 109u8, 250u8, 255u8)
             } else if ((13..=15).contains(&y) && (8..=23).contains(&x))
                 || ((16..=20).contains(&y) && (11..=20).contains(&x))
                 || ((21..=23).contains(&y) && (8..=23).contains(&x))
             {
-                (241u8, 243u8, 247u8, 255u8)
+                (244u8, 244u8, 247u8, 255u8)
             } else if (2..30).contains(&x) && (2..30).contains(&y) {
-                (25u8, 28u8, 36u8, 255u8)
+                (43u8, 43u8, 49u8, 255u8)
             } else {
-                (14u8, 16u8, 21u8, 255u8)
+                (24u8, 24u8, 27u8, 255u8)
             };
             rgba.extend_from_slice(&[r, g, b, a]);
         }
@@ -132,10 +134,18 @@ fn main() -> ExitCode {
             .await
             .map_err(|err| format!("Échec ouverture du cache chiffré : {err}"))?;
 
+        let configured_server_url = cache
+            .load_account()
+            .await
+            .ok()
+            .flatten()
+            .map(|acct| acct.server_url)
+            .unwrap_or_else(|| server_handle.url.clone());
+
         let host = Arc::new(
             DesktopCommandHost::new(
                 cache,
-                &server_handle.url,
+                &configured_server_url,
                 SecureClipboardManager::native_windows(),
                 default_biometric_provider(),
                 Arc::new(SystemTrayController::default()),
@@ -154,18 +164,18 @@ fn main() -> ExitCode {
         .await
         .map_err(|err| format!("Échec démarrage interface locale : {err}"))?;
 
-        Ok::<_, String>((server_handle, bridge_handle))
+        Ok::<_, String>((server_handle, bridge_handle, host))
     });
 
-    let (server_handle, bridge_handle) = match bootstrap {
-        Ok(pair) => pair,
+    let (server_handle, bridge_handle, host) = match bootstrap {
+        Ok(triple) => triple,
         Err(msg) => {
             report_startup_error(&msg);
             return ExitCode::FAILURE;
         }
     };
 
-    let exit_code = run_ui_loop(&data_dir, &bridge_handle.url);
+    let exit_code = run_ui_loop(&data_dir, &bridge_handle.url, host);
 
     runtime.block_on(async move {
         bridge_handle.shutdown().await;
@@ -176,22 +186,74 @@ fn main() -> ExitCode {
 }
 
 #[cfg(target_os = "windows")]
-fn run_ui_loop(data_dir: &std::path::Path, bridge_url: &str) -> ExitCode {
+fn map_resize_direction(edge: WindowResizeEdge) -> tao::window::ResizeDirection {
+    use tao::window::ResizeDirection;
+    match edge {
+        WindowResizeEdge::North => ResizeDirection::North,
+        WindowResizeEdge::South => ResizeDirection::South,
+        WindowResizeEdge::East => ResizeDirection::East,
+        WindowResizeEdge::West => ResizeDirection::West,
+        WindowResizeEdge::NorthEast => ResizeDirection::NorthEast,
+        WindowResizeEdge::NorthWest => ResizeDirection::NorthWest,
+        WindowResizeEdge::SouthEast => ResizeDirection::SouthEast,
+        WindowResizeEdge::SouthWest => ResizeDirection::SouthWest,
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn compute_centered_position<T: 'static>(
+    event_loop: &tao::event_loop::EventLoop<T>,
+    logical_w: f64,
+    logical_h: f64,
+) -> Option<tao::dpi::PhysicalPosition<i32>> {
+    let monitor = event_loop
+        .primary_monitor()
+        .or_else(|| event_loop.available_monitors().next())?;
+    let scale = monitor.scale_factor();
+    let pos = monitor.position();
+    let mon_size = monitor.size();
+    let win_w = (logical_w * scale).round() as i32;
+    let win_h = (logical_h * scale).round() as i32;
+    let x = pos.x + ((mon_size.width as i32 - win_w) / 2).max(0);
+    let y = pos.y + ((mon_size.height as i32 - win_h) / 2).max(0);
+    Some(tao::dpi::PhysicalPosition::new(x, y))
+}
+
+#[cfg(target_os = "windows")]
+fn run_ui_loop(
+    data_dir: &std::path::Path,
+    bridge_url: &str,
+    host: Arc<DesktopCommandHost>,
+) -> ExitCode {
     use tao::dpi::LogicalSize;
     use tao::event::{Event, WindowEvent};
-    use tao::event_loop::{ControlFlow, EventLoop};
+    use tao::event_loop::{ControlFlow, EventLoopBuilder};
     use tao::window::{Theme, WindowBuilder};
     use wry::{NewWindowResponse, WebContext, WebViewBuilder};
 
-    let event_loop = EventLoop::new();
-    let window = match WindowBuilder::new()
+    const INIT_WIDTH: f64 = 1240.0;
+    const INIT_HEIGHT: f64 = 800.0;
+
+    let event_loop = EventLoopBuilder::<NativeWindowAction>::with_user_event().build();
+    let proxy = event_loop.create_proxy();
+    host.set_window_controller(Arc::new(move |action| {
+        let _ = proxy.send_event(action);
+    }));
+
+    let mut builder = WindowBuilder::new()
         .with_title("Anvil")
-        .with_inner_size(LogicalSize::new(1240.0, 800.0))
+        .with_decorations(false)
+        .with_resizable(true)
+        .with_inner_size(LogicalSize::new(INIT_WIDTH, INIT_HEIGHT))
         .with_min_inner_size(LogicalSize::new(960.0, 620.0))
         .with_theme(Some(Theme::Dark))
-        .with_window_icon(build_anvil_window_icon())
-        .build(&event_loop)
-    {
+        .with_window_icon(build_anvil_window_icon());
+
+    if let Some(center) = compute_centered_position(&event_loop, INIT_WIDTH, INIT_HEIGHT) {
+        builder = builder.with_position(center);
+    }
+
+    let window = match builder.build(&event_loop) {
         Ok(w) => w,
         Err(err) => {
             report_startup_error(&format!("Impossible de créer la fenêtre Windows : {err}"));
@@ -199,13 +261,18 @@ fn run_ui_loop(data_dir: &std::path::Path, bridge_url: &str) -> ExitCode {
         }
     };
 
+    if let Some(center) = compute_centered_position(&event_loop, INIT_WIDTH, INIT_HEIGHT) {
+        window.set_outer_position(center);
+    }
+    host.set_window_chrome(window.is_maximized(), window.is_focused());
+
     let webview_dir = data_dir.join("webview2");
     let _ = std::fs::create_dir_all(&webview_dir);
     let mut web_context = WebContext::new(Some(webview_dir));
 
     let _webview = match WebViewBuilder::new_with_web_context(&mut web_context)
         .with_url(bridge_url)
-        .with_background_color((14, 16, 21, 255))
+        .with_background_color((27, 27, 31, 255))
         .with_general_autofill_enabled(false)
         .with_new_window_req_handler(|url, _features| {
             open_external_url_os(&url);
@@ -222,18 +289,59 @@ fn run_ui_loop(data_dir: &std::path::Path, bridge_url: &str) -> ExitCode {
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
-        if let Event::WindowEvent {
-            event: WindowEvent::CloseRequested,
-            ..
-        } = event
-        {
-            *control_flow = ControlFlow::Exit;
+        match event {
+            Event::UserEvent(action) => match action {
+                NativeWindowAction::Minimize => {
+                    window.set_minimized(true);
+                }
+                NativeWindowAction::ToggleMaximize => {
+                    let next = !window.is_maximized();
+                    window.set_maximized(next);
+                    host.set_window_chrome(next, window.is_focused());
+                }
+                NativeWindowAction::Close => {
+                    *control_flow = ControlFlow::Exit;
+                }
+                NativeWindowAction::DragMove => {
+                    if !window.is_maximized() {
+                        let _ = window.drag_window();
+                    }
+                }
+                NativeWindowAction::DragResize(edge) => {
+                    if !window.is_maximized() {
+                        let _ = window.drag_resize_window(map_resize_direction(edge));
+                    }
+                }
+            },
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
+            } => {
+                *control_flow = ControlFlow::Exit;
+            }
+            Event::WindowEvent {
+                event: WindowEvent::Resized(_),
+                ..
+            } => {
+                host.set_window_chrome(window.is_maximized(), window.is_focused());
+            }
+            Event::WindowEvent {
+                event: WindowEvent::Focused(focused),
+                ..
+            } => {
+                host.set_window_chrome(window.is_maximized(), focused);
+            }
+            _ => {}
         }
     });
 }
 
 #[cfg(not(target_os = "windows"))]
-fn run_ui_loop(_data_dir: &std::path::Path, bridge_url: &str) -> ExitCode {
+fn run_ui_loop(
+    _data_dir: &std::path::Path,
+    bridge_url: &str,
+    _host: Arc<DesktopCommandHost>,
+) -> ExitCode {
     println!("Anvil Desktop interface available on {bridge_url}");
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()

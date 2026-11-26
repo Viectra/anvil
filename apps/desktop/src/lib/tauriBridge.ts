@@ -109,6 +109,26 @@ export class TauriAnvilBridge implements AnvilClientBridge {
     return invokeIpc<VaultStatusDto>("cmd_enable_biometric", { masterPassword });
   }
 
+  disableBiometric(): Promise<VaultStatusDto> {
+    return invokeIpc<VaultStatusDto>("cmd_disable_biometric");
+  }
+
+  logout(): Promise<VaultStatusDto> {
+    return invokeIpc<VaultStatusDto>("cmd_logout");
+  }
+
+  changeEmail(currentPassword: string, newEmail: string): Promise<VaultStatusDto> {
+    return invokeIpc<VaultStatusDto>("cmd_change_email", { currentPassword, newEmail });
+  }
+
+  uploadAvatar(bytes: number[]): Promise<VaultStatusDto> {
+    return invokeIpc<VaultStatusDto>("cmd_upload_avatar", { bytes });
+  }
+
+  deleteAvatar(): Promise<VaultStatusDto> {
+    return invokeIpc<VaultStatusDto>("cmd_delete_avatar");
+  }
+
   lock(): Promise<VaultStatusDto> {
     return invokeIpc<VaultStatusDto>("cmd_lock");
   }

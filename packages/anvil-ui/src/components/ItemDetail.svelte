@@ -169,7 +169,7 @@
           <button
             type="submit"
             disabled={saving}
-            class="rounded-[6px] bg-[var(--accent-forge)] px-4 py-1.5 text-[12.5px] font-semibold text-[#0B0C0F] hover:bg-[var(--accent-forge-hover)] disabled:opacity-60"
+            class="rounded-[6px] bg-[var(--accent-forge)] px-4 py-1.5 text-[12.5px] font-semibold text-white hover:bg-[var(--accent-forge-hover)] disabled:opacity-60"
           >
             {saving ? "Chiffrement..." : "Enregistrer"}
           </button>

@@ -317,6 +317,11 @@
           await bridge.unlockWithBiometric();
           await store.refreshStatus();
         })}
+      onLogout={() =>
+        runAction(async () => {
+          await bridge.logout?.();
+          await store.refreshStatus();
+        })}
       onLogin={(url, email, pw) =>
         runAction(async () => {
           await bridge.login(url, email, pw);
@@ -337,6 +342,9 @@
         favoriteCount={store.favoriteCount}
         pendingConflicts={store.conflicts.length}
         activeFilter={store.navFilter}
+        userEmail={store.status.email}
+        userRole={store.status.role}
+        avatarDataUrl={store.status.avatar_data_url}
         onSelectFilter={(filter) => void handleSelectFilter(filter)}
         onCreateFolder={(name) => {
           void bridge.saveFolder(name, null).then(() => store.reloadVaultData());

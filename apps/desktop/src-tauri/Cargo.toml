@@ -46,6 +46,14 @@ zeroize.workspace = true
 [target.'cfg(target_os = "windows")'.dependencies]
 tao = "0.37"
 wry = "0.57"
+windows = { version = "0.62", features = [
+    "Security_Credentials_UI",
+    "Foundation",
+    "Win32_Foundation",
+    "Win32_System_WinRT",
+    "Win32_UI_WindowsAndMessaging",
+] }
+windows-future = "0.3"
 
 [dev-dependencies]
 http.workspace = true

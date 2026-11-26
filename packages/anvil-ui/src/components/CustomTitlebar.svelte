@@ -49,18 +49,16 @@
     data-tauri-drag-region
     ondblclick={handleSpacerDblClick}
     role="presentation"
-    class="flex h-full items-center gap-2.5 pr-3 transition-opacity"
+    class="flex h-full items-center gap-3 pr-3 transition-opacity"
     class:opacity-65={!chrome.is_focused}
-    style:padding-left={chrome.platform === "macos" ? "76px" : "12px"}
+    style:padding-left={chrome.platform === "macos" ? "76px" : "14px"}
   >
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="#E63946" aria-hidden="true">
-      <path
-        fill-rule="evenodd"
-        clip-rule="evenodd"
-        d="M8.2 2.5H15.8L20.5 6.4V13.4L12 21.8L3.5 13.4V6.4L8.2 2.5ZM5.5 8.8L18.5 8.8V10.6H16L14.3 12.1V15L16.5 16.8V18H7.5V16.8L9.7 15V12.1L8 10.6L5.5 9.8V8.8Z"
-      />
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="28" height="28" fill="none" aria-hidden="true">
+      <path d="M22 6H42L54 16V35L32 58L10 35V16L22 6Z" fill="#232329" stroke="#3C3C47" stroke-width="2.4" />
+      <path d="M14 25.5H47.5V27.6H41.5L37.5 31V38.2L43.5 43V46H20.5V43L26.5 38.2V31L21.5 27.8L14 25.5Z" fill="#F4F4F7" />
+      <path d="M13.5 22.5H48V26H14.5L13.5 22.5Z" fill="#7C6DFA" />
     </svg>
-    <span class="text-[13px] font-semibold tracking-tight text-[var(--text-primary)]">Anvil</span>
+    <span class="text-[16px] font-bold tracking-tight text-[var(--text-primary)]">Anvil</span>
 
     {#if unlocked}
       <span
@@ -105,10 +103,6 @@
           Ctrl+K
         </span>
       </div>
-    {:else}
-      <span class="text-[12px] font-medium text-[var(--text-muted)]">
-        Coffre Zero-Knowledge verrouillé
-      </span>
     {/if}
   </div>
 

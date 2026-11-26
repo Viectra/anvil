@@ -9,6 +9,9 @@
     favoriteCount: number;
     pendingConflicts: number;
     activeFilter: NavFilter;
+    userEmail?: string | null;
+    userRole?: string | null;
+    avatarDataUrl?: string | null;
     onSelectFilter: (filter: NavFilter) => void;
     onCreateFolder: (name: string) => void;
     onOpenGenerator: () => void;
@@ -23,6 +26,9 @@
     favoriteCount,
     pendingConflicts,
     activeFilter,
+    userEmail = null,
+    userRole = null,
+    avatarDataUrl = null,
     onSelectFilter,
     onCreateFolder,
     onOpenGenerator,
@@ -178,4 +184,26 @@
       </nav>
     </section>
   </div>
+
+  {#if userEmail}
+    <div class="mt-3 flex items-center gap-2.5 border-t border-[var(--border-subtle)] pt-3">
+      <div class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-[6px] bg-[var(--bg-elevated)] text-[11px] font-bold text-[var(--accent-forge)]">
+        {#if avatarDataUrl}
+          <img src={avatarDataUrl} alt="Avatar" class="h-full w-full object-cover" />
+        {:else}
+          {userEmail.slice(0, 2).toUpperCase()}
+        {/if}
+      </div>
+      <div class="min-w-0 flex-1">
+        <div class="truncate text-[12px] font-semibold text-[var(--text-primary)]">{userEmail}</div>
+        <span
+          class="inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase"
+          style:background-color={userRole === "admin" ? "var(--accent-forge-muted)" : "rgba(255,255,255,0.08)"}
+          style:color={userRole === "admin" ? "#c2baff" : "var(--text-secondary)"}
+        >
+          {userRole === "admin" ? "Admin" : "User"}
+        </span>
+      </div>
+    </div>
+  {/if}
 </aside>

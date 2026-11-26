@@ -68,6 +68,30 @@ pub enum DesktopError {
     InternalState,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WindowResizeEdge {
+    North,
+    South,
+    East,
+    West,
+    NorthEast,
+    NorthWest,
+    SouthEast,
+    SouthWest,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NativeWindowAction {
+    Minimize,
+    ToggleMaximize,
+    Close,
+    DragMove,
+    DragResize(WindowResizeEdge),
+}
+
+type WindowControlCallback = Arc<dyn Fn(NativeWindowAction) + Send + Sync>;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VaultStatusDto {
     pub configured: bool,
@@ -77,6 +101,8 @@ pub struct VaultStatusDto {
     pub biometric_enabled: bool,
     pub server_url: Option<String>,
     pub email: Option<String>,
+    pub role: Option<String>,
+    pub avatar_data_url: Option<String>,
     pub sync_revision: i64,
     pub pending_conflicts: usize,
 }
@@ -301,6 +327,7 @@ pub struct DesktopCommandHost {
     lock_monitor: Arc<OsSessionLockMonitor>,
     pending_imports: Mutex<HashMap<Uuid, ImportPreview>>,
     chrome: RwLock<WindowChromeStateDto>,
+    window_controller: RwLock<Option<WindowControlCallback>>,
     device_name: String,
     device_platform: String,
 }
@@ -352,9 +379,24 @@ impl DesktopCommandHost {
                 is_maximized: false,
                 is_focused: true,
             }),
+            window_controller: RwLock::new(None),
             device_name,
             device_platform,
         })
+    }
+
+    pub fn set_window_controller(&self, controller: WindowControlCallback) {
+        if let Ok(mut guard) = self.window_controller.write() {
+            *guard = Some(controller);
+        }
+    }
+
+    fn emit_window_action(&self, action: NativeWindowAction) {
+        if let Ok(guard) = self.window_controller.read()
+            && let Some(cb) = guard.as_ref()
+        {
+            cb(action);
+        }
     }
 
     pub fn tray(&self) -> &Arc<SystemTrayController> {
@@ -417,21 +459,36 @@ impl DesktopCommandHost {
         let authenticated = engine.api.has_session().await;
         let unlocked = engine.lock.is_unlocked();
 
-        let (configured, biometric_enabled, server_url, email, sync_revision, pending_conflicts) =
-            match account {
-                Some(acct) => {
-                    let conflicts = self.cache.list_conflicts(acct.user_id).await?;
-                    (
-                        true,
-                        acct.biometric_sealed_vault_key.is_some(),
-                        Some(acct.server_url),
-                        Some(acct.email),
-                        acct.last_synced_revision,
-                        conflicts.len(),
-                    )
-                }
-                None => (false, false, None, None, 0, 0),
-            };
+        let (
+            configured,
+            biometric_enabled,
+            server_url,
+            email,
+            role,
+            avatar_data_url,
+            sync_revision,
+            pending_conflicts,
+        ) = match account {
+            Some(acct) => {
+                let conflicts = self.cache.list_conflicts(acct.user_id).await?;
+                let avatar_url = acct
+                    .avatar_png
+                    .as_deref()
+                    .filter(|b| b.starts_with(b"\x89PNG\r\n\x1a\n"))
+                    .map(|b| format!("data:image/png;base64,{}", STANDARD.encode(b)));
+                (
+                    true,
+                    acct.biometric_sealed_vault_key.is_some(),
+                    Some(acct.server_url),
+                    Some(acct.email),
+                    Some(acct.role),
+                    avatar_url,
+                    acct.last_synced_revision,
+                    conflicts.len(),
+                )
+            }
+            None => (false, false, None, None, None, None, 0, 0),
+        };
 
         Ok(VaultStatusDto {
             configured,
@@ -441,9 +498,22 @@ impl DesktopCommandHost {
             biometric_enabled,
             server_url,
             email,
+            role,
+            avatar_data_url,
             sync_revision,
             pending_conflicts,
         })
+    }
+
+    async fn engine_for_account_server(
+        &self,
+        server_url: &str,
+    ) -> Result<Arc<ClientSyncEngine>, DesktopError> {
+        let engine = self.active_engine()?;
+        if engine.api.base_url().trim_end_matches('/') == server_url.trim_end_matches('/') {
+            return Ok(engine);
+        }
+        self.replace_engine_for_server(server_url)
     }
 
     pub async fn cmd_register(
@@ -478,7 +548,12 @@ impl DesktopCommandHost {
         &self,
         master_password: &str,
     ) -> Result<VaultStatusDto, DesktopError> {
-        let engine = self.active_engine()?;
+        let acct = self
+            .cache
+            .load_account()
+            .await?
+            .ok_or(ClientError::NotConfigured)?;
+        let engine = self.engine_for_account_server(&acct.server_url).await?;
         engine.unlock_with_password(master_password).await?;
         self.sync_tray_count(&engine).await;
         self.cmd_status().await
@@ -491,12 +566,12 @@ impl DesktopCommandHost {
         if !self.biometric.is_available() {
             return Err(DesktopError::Biometric(BiometricError::Unavailable));
         }
-        let engine = self.active_engine()?;
         let acct = self
             .cache
             .load_account()
             .await?
             .ok_or(ClientError::NotConfigured)?;
+        let engine = self.engine_for_account_server(&acct.server_url).await?;
         let kdf_salt = fixed_salt(&acct.kdf_salt)?;
         let kdf_params = account_kdf_params(&acct)?;
         let pw = MasterPassword::new(master_password);
@@ -515,16 +590,26 @@ impl DesktopCommandHost {
         self.cmd_status().await
     }
 
-    pub async fn cmd_unlock_biometric(&self) -> Result<VaultStatusDto, DesktopError> {
-        if !self.biometric.is_available() {
-            return Err(DesktopError::Biometric(BiometricError::Unavailable));
-        }
-        let engine = self.active_engine()?;
+    pub async fn cmd_disable_biometric(&self) -> Result<VaultStatusDto, DesktopError> {
         let acct = self
             .cache
             .load_account()
             .await?
             .ok_or(ClientError::NotConfigured)?;
+        self.cache.set_biometric_seal(acct.user_id, None).await?;
+        self.cmd_status().await
+    }
+
+    pub async fn cmd_unlock_biometric(&self) -> Result<VaultStatusDto, DesktopError> {
+        if !self.biometric.is_available() {
+            return Err(DesktopError::Biometric(BiometricError::Unavailable));
+        }
+        let acct = self
+            .cache
+            .load_account()
+            .await?
+            .ok_or(ClientError::NotConfigured)?;
+        let engine = self.engine_for_account_server(&acct.server_url).await?;
         let sealed = acct
             .biometric_sealed_vault_key
             .as_deref()
@@ -532,6 +617,54 @@ impl DesktopCommandHost {
         let vault_key = self.biometric.unseal_vault_key(acct.user_id, sealed)?;
         engine.unlock_with_vault_key(vault_key).await?;
         self.sync_tray_count(&engine).await;
+        self.cmd_status().await
+    }
+
+    pub async fn cmd_logout(&self) -> Result<VaultStatusDto, DesktopError> {
+        let engine = self.active_engine()?;
+        engine.logout_and_clear_local_account().await?;
+        let _ = self.clipboard.clear_on_lock();
+        if let Ok(mut pending) = self.pending_imports.lock() {
+            pending.clear();
+        }
+        self.tray.set_state(TrayVisualState::Locked);
+        self.cmd_status().await
+    }
+
+    pub async fn cmd_change_email(
+        &self,
+        current_password: &str,
+        new_email: &str,
+    ) -> Result<VaultStatusDto, DesktopError> {
+        let acct = self
+            .cache
+            .load_account()
+            .await?
+            .ok_or(ClientError::NotConfigured)?;
+        let engine = self.engine_for_account_server(&acct.server_url).await?;
+        engine.change_email(current_password, new_email).await?;
+        self.cmd_status().await
+    }
+
+    pub async fn cmd_upload_avatar(&self, bytes: Vec<u8>) -> Result<VaultStatusDto, DesktopError> {
+        let acct = self
+            .cache
+            .load_account()
+            .await?
+            .ok_or(ClientError::NotConfigured)?;
+        let engine = self.engine_for_account_server(&acct.server_url).await?;
+        engine.upload_avatar(&bytes).await?;
+        self.cmd_status().await
+    }
+
+    pub async fn cmd_delete_avatar(&self) -> Result<VaultStatusDto, DesktopError> {
+        let acct = self
+            .cache
+            .load_account()
+            .await?
+            .ok_or(ClientError::NotConfigured)?;
+        let engine = self.engine_for_account_server(&acct.server_url).await?;
+        engine.delete_avatar().await?;
         self.cmd_status().await
     }
 
@@ -1241,6 +1374,20 @@ impl DesktopCommandHost {
             revoke_other_sessions: bool,
         }
         #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct ChangeEmailArgs {
+            current_password: String,
+            new_email: String,
+        }
+        #[derive(Deserialize)]
+        struct UploadAvatarArgs {
+            bytes: Vec<u8>,
+        }
+        #[derive(Deserialize)]
+        struct DragResizeArgs {
+            direction: WindowResizeEdge,
+        }
+        #[derive(Deserialize)]
         struct OpenUrlArgs {
             url: String,
         }
@@ -1283,6 +1430,21 @@ impl DesktopCommandHost {
                 let a: PasswordArg = parse_json(body)?;
                 serialize_json(&self.cmd_enable_biometric(&a.master_password).await?)?
             }
+            "cmd_disable_biometric" => serialize_json(&self.cmd_disable_biometric().await?)?,
+            "cmd_logout" => serialize_json(&self.cmd_logout().await?)?,
+            "cmd_change_email" => {
+                let a: ChangeEmailArgs = parse_json(body)?;
+                serialize_json(
+                    &self
+                        .cmd_change_email(&a.current_password, &a.new_email)
+                        .await?,
+                )?
+            }
+            "cmd_upload_avatar" => {
+                let a: UploadAvatarArgs = parse_json(body)?;
+                serialize_json(&self.cmd_upload_avatar(a.bytes).await?)?
+            }
+            "cmd_delete_avatar" => serialize_json(&self.cmd_delete_avatar().await?)?,
             "cmd_lock" => serialize_json(&self.cmd_lock().await?)?,
             "cmd_list_folders" => serialize_json(&self.cmd_list_folders().await?)?,
             "cmd_save_folder" => {
@@ -1385,15 +1547,31 @@ impl DesktopCommandHost {
                 serialize_json(&self.cmd_open_external_url(&a.url)?)?
             }
             "cmd_window_chrome" => serialize_json(&self.cmd_window_chrome()?)?,
-            "cmd_window_minimize" => "null".to_owned(),
+            "cmd_window_minimize" => {
+                self.emit_window_action(NativeWindowAction::Minimize);
+                "null".to_owned()
+            }
             "cmd_window_toggle_maximize" => {
                 let next_maximized = !self.cmd_window_chrome()?.is_maximized;
                 if let Ok(mut guard) = self.chrome.write() {
                     guard.is_maximized = next_maximized;
                 }
+                self.emit_window_action(NativeWindowAction::ToggleMaximize);
                 "null".to_owned()
             }
-            "cmd_window_close" => "null".to_owned(),
+            "cmd_window_close" => {
+                self.emit_window_action(NativeWindowAction::Close);
+                "null".to_owned()
+            }
+            "cmd_window_drag" => {
+                self.emit_window_action(NativeWindowAction::DragMove);
+                "null".to_owned()
+            }
+            "cmd_window_drag_resize" => {
+                let a: DragResizeArgs = parse_json(body)?;
+                self.emit_window_action(NativeWindowAction::DragResize(a.direction));
+                "null".to_owned()
+            }
             "cmd_hit_test" => {
                 let a: HitTestRequestDto = parse_json(body)?;
                 serialize_json(&self.cmd_hit_test(a))?

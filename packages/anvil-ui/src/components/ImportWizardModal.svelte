@@ -167,7 +167,7 @@
               type="button"
               disabled={!selectedBytes}
               onclick={() => void runDryRun()}
-              class="rounded-[6px] bg-[var(--accent-forge)] px-4 py-1.5 font-semibold text-[#0B0C0F] disabled:opacity-50"
+              class="rounded-[6px] bg-[var(--accent-forge)] px-4 py-1.5 font-semibold text-white disabled:opacity-50"
             >
               Analyser avant import (Dry-Run)
             </button>
@@ -234,7 +234,7 @@
             type="button"
             disabled={!exportMasterPw}
             onclick={() => void runExport()}
-            class="rounded-[6px] bg-[var(--accent-forge)] px-4 py-1.5 font-semibold text-[#0B0C0F] disabled:opacity-50"
+            class="rounded-[6px] bg-[var(--accent-forge)] px-4 py-1.5 font-semibold text-white disabled:opacity-50"
           >
             Télécharger l'export
           </button>

@@ -217,6 +217,8 @@ async function getStatusDto(): Promise<VaultStatusDto> {
     biometric_enabled: false,
     server_url: store.account?.server_url ?? null,
     email: store.account?.email ?? null,
+    role: store.account?.role ?? null,
+    avatar_data_url: null,
     sync_revision: store.account?.sync_revision ?? 0,
     pending_conflicts: 0,
   };

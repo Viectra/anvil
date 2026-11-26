@@ -66,6 +66,8 @@ async fn setup_seeded_host(
             encrypted_vault_key: wrapped_vk,
             last_synced_revision: 0,
             biometric_sealed_vault_key: None,
+            avatar_png: None,
+            encrypted_refresh_token: None,
             updated_at: Utc::now(),
         })
         .await?;
@@ -654,6 +656,68 @@ async fn embedded_server_and_ui_bridge_support_full_standalone_flow()
     .await?;
     assert_eq!(st, StatusCode::OK);
     assert_eq!(list_res["data"].as_array().map(|a| a.len()), Some(1));
+
+    // Change email and upload/delete validated profile picture via IPC.
+    let (st, email_res) = send_ipc(
+        "cmd_change_email",
+        serde_json::json!({
+            "currentPassword": "ForgeMaster#2026!",
+            "newEmail": "standalone.updated@example.com"
+        }),
+    )
+    .await?;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(email_res["data"]["email"], "standalone.updated@example.com");
+
+    // Malicious SVG avatar payload must be rejected cleanly with HTTP 400.
+    let (bad_av_st, _) = send_ipc(
+        "cmd_upload_avatar",
+        serde_json::json!({
+            "bytes": b"<svg onload='alert(1)'></svg>".to_vec()
+        }),
+    )
+    .await?;
+    assert_eq!(bad_av_st, StatusCode::BAD_REQUEST);
+
+    // Valid PNG avatar payload succeeds and exposes avatar_data_url in status.
+    let sample_png: Vec<u8> = [
+        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6,
+        0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84, 120, 218, 99, 96, 0, 2, 0, 0, 5, 0,
+        1, 233, 250, 220, 216, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+    ]
+    .to_vec();
+    let (ok_av_st, ok_av_res) = send_ipc(
+        "cmd_upload_avatar",
+        serde_json::json!({ "bytes": sample_png }),
+    )
+    .await?;
+    assert_eq!(ok_av_st, StatusCode::OK);
+    assert!(
+        ok_av_res["data"]["avatar_data_url"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("data:image/png;base64,")
+    );
+
+    // Enabling and disabling Windows Hello/biometric seal clears sealed key.
+    let (bio_on_st, bio_on_res) = send_ipc(
+        "cmd_enable_biometric",
+        serde_json::json!({ "masterPassword": "ForgeMaster#2026!" }),
+    )
+    .await?;
+    assert_eq!(bio_on_st, StatusCode::OK);
+    assert_eq!(bio_on_res["data"]["biometric_enabled"], true);
+
+    let (bio_off_st, bio_off_res) =
+        send_ipc("cmd_disable_biometric", serde_json::json!({})).await?;
+    assert_eq!(bio_off_st, StatusCode::OK);
+    assert_eq!(bio_off_res["data"]["biometric_enabled"], false);
+
+    // Logout wipes RAM keys and local SQLite account, redirecting state back to unconfigured.
+    let (logout_st, logout_res) = send_ipc("cmd_logout", serde_json::json!({})).await?;
+    assert_eq!(logout_st, StatusCode::OK);
+    assert_eq!(logout_res["data"]["configured"], false);
+    assert_eq!(logout_res["data"]["unlocked"], false);
 
     server.shutdown().await;
     Ok(())

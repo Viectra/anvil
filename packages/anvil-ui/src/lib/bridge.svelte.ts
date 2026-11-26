@@ -31,6 +31,11 @@ export interface AnvilClientBridge {
   unlockWithPassword(masterPassword: string): Promise<VaultStatusDto>;
   unlockWithBiometric(): Promise<VaultStatusDto>;
   enableBiometric(masterPassword: string): Promise<VaultStatusDto>;
+  disableBiometric?(): Promise<VaultStatusDto>;
+  logout?(): Promise<VaultStatusDto>;
+  changeEmail?(currentPassword: string, newEmail: string): Promise<VaultStatusDto>;
+  uploadAvatar?(bytes: number[]): Promise<VaultStatusDto>;
+  deleteAvatar?(): Promise<VaultStatusDto>;
   lock(): Promise<VaultStatusDto>;
   listFolders(): Promise<FolderDto[]>;
   saveFolder(name: string, id?: string | null): Promise<FolderDto>;
@@ -73,6 +78,8 @@ export class VaultStore {
     biometric_enabled: false,
     server_url: null,
     email: null,
+    role: null,
+    avatar_data_url: null,
     sync_revision: 0,
     pending_conflicts: 0,
   });

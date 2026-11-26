@@ -188,6 +188,8 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "windows",
+ "windows-future",
  "wry",
  "zeroize",
 ]
@@ -230,6 +232,7 @@ dependencies = [
  "hmac",
  "http",
  "http-body-util",
+ "image",
  "ipnet",
  "jsonwebtoken",
  "reqwest",
