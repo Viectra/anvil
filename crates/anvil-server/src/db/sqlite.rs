@@ -14,8 +14,8 @@ use crate::db::{
     RegisterOutcome, RegisterUserInput, RotatePasswordInput, RotatePasswordOutcome,
     RotateRefreshOutcome, RotateVaultKeyInput, RotateVaultKeyOutcome, SessionRecord,
     StoredBlobData, StoredBlobMeta, StoredFolderRecord, StoredItemRecord, SyncPushBatch,
-    SyncPushOutcome, UpdateItemOutcome, UpdateUserAdminInput, UpdateUserAdminOutcome, UserRecord,
-    UserRole, VaultSyncState,
+    SyncPushOutcome, UpdateEmailOutcome, UpdateItemOutcome, UpdateUserAdminInput,
+    UpdateUserAdminOutcome, UserRecord, UserRole, VaultSyncState,
 };
 
 fn fmt_uuid(id: Uuid) -> String {
@@ -96,6 +96,7 @@ fn decode_user(row: &SqliteRow) -> Result<UserRecord, DbError> {
         key_version: to_u32(row.try_get("key_version")?, "key_version")?,
         encrypted_vault_key: row.try_get("encrypted_vault_key")?,
         sync_revision: row.try_get("sync_revision")?,
+        avatar_png: row.try_get("avatar_png")?,
         created_at: get_ts(row, "created_at")?,
         updated_at: get_ts(row, "updated_at")?,
     })
@@ -191,7 +192,7 @@ pub async fn find_user_by_email(
     let row = sqlx::query(
         "SELECT id, email, role, is_active, kdf_algorithm, kdf_memory_kib, kdf_iterations,
                 kdf_parallelism, kdf_salt, server_auth_salt, server_auth_hash, key_version,
-                encrypted_vault_key, sync_revision, created_at, updated_at
+                encrypted_vault_key, sync_revision, avatar_png, created_at, updated_at
          FROM users
          WHERE email = ?1",
     )
@@ -209,7 +210,7 @@ pub async fn find_user_by_id(
     let row = sqlx::query(
         "SELECT id, email, role, is_active, kdf_algorithm, kdf_memory_kib, kdf_iterations,
                 kdf_parallelism, kdf_salt, server_auth_salt, server_auth_hash, key_version,
-                encrypted_vault_key, sync_revision, created_at, updated_at
+                encrypted_vault_key, sync_revision, avatar_png, created_at, updated_at
          FROM users
          WHERE id = ?1",
     )
@@ -310,6 +311,7 @@ pub async fn register_user_with_session(
         key_version: 1,
         encrypted_vault_key: input.encrypted_vault_key,
         sync_revision: 0,
+        avatar_png: None,
         created_at: now,
         updated_at: now,
     };
@@ -910,6 +912,115 @@ pub async fn delete_user_account(pool: &sqlx::SqlitePool, user_id: Uuid) -> Resu
         .execute(pool)
         .await?;
     Ok(res.rows_affected() > 0)
+}
+
+pub async fn update_user_email(
+    pool: &sqlx::SqlitePool,
+    user_id: Uuid,
+    normalized_email: &str,
+    actor_ip: Option<&str>,
+    session_id: Option<Uuid>,
+) -> Result<UpdateEmailOutcome, DbError> {
+    let mut tx = pool.begin().await?;
+    let now = Utc::now();
+    let now_str = fmt_ts(now);
+    let user_id_str = fmt_uuid(user_id);
+
+    let exists_user = sqlx::query("SELECT email FROM users WHERE id = ?1")
+        .bind(&user_id_str)
+        .fetch_optional(&mut *tx)
+        .await?;
+    if exists_user.is_none() {
+        return Ok(UpdateEmailOutcome::NotFound);
+    }
+
+    let conflict = sqlx::query("SELECT id FROM users WHERE email = ?1 AND id <> ?2")
+        .bind(normalized_email)
+        .bind(&user_id_str)
+        .fetch_optional(&mut *tx)
+        .await?;
+    if conflict.is_some() {
+        return Ok(UpdateEmailOutcome::EmailExists);
+    }
+
+    let update_res = sqlx::query("UPDATE users SET email = ?1, updated_at = ?2 WHERE id = ?3")
+        .bind(normalized_email)
+        .bind(&now_str)
+        .bind(&user_id_str)
+        .execute(&mut *tx)
+        .await;
+
+    if let Err(err) = update_res {
+        if let Some(msg) = is_sqlite_constraint_unique(&err)
+            && msg.contains("users.email")
+        {
+            return Ok(UpdateEmailOutcome::EmailExists);
+        }
+        return Err(err.into());
+    }
+
+    insert_audit_log_tx(
+        &mut tx,
+        AuditLogInput {
+            user_id: Some(user_id),
+            event_type: "account_email_changed",
+            actor_ip,
+            session_id,
+            metadata_json: None,
+        },
+        now,
+    )
+    .await?;
+
+    tx.commit().await?;
+    Ok(UpdateEmailOutcome::Updated {
+        email: normalized_email.to_owned(),
+        updated_at: now,
+    })
+}
+
+pub async fn update_user_avatar(
+    pool: &sqlx::SqlitePool,
+    user_id: Uuid,
+    avatar_png: Option<&[u8]>,
+    actor_ip: Option<&str>,
+    session_id: Option<Uuid>,
+) -> Result<bool, DbError> {
+    let mut tx = pool.begin().await?;
+    let now = Utc::now();
+    let now_str = fmt_ts(now);
+    let user_id_str = fmt_uuid(user_id);
+
+    let res = sqlx::query("UPDATE users SET avatar_png = ?1, updated_at = ?2 WHERE id = ?3")
+        .bind(avatar_png)
+        .bind(&now_str)
+        .bind(&user_id_str)
+        .execute(&mut *tx)
+        .await?;
+
+    if res.rows_affected() == 0 {
+        return Ok(false);
+    }
+
+    insert_audit_log_tx(
+        &mut tx,
+        AuditLogInput {
+            user_id: Some(user_id),
+            event_type: if avatar_png.is_some() {
+                "account_avatar_updated"
+            } else {
+                "account_avatar_removed"
+            },
+            actor_ip,
+            session_id,
+            metadata_json: None,
+        },
+        now,
+    )
+    .await?;
+
+    tx.commit().await?;
+    Ok(true)
 }
 
 pub async fn pull_vault_sync(
@@ -1679,7 +1790,7 @@ async fn find_user_by_id_tx(
     let row = sqlx::query(
         "SELECT id, email, role, is_active, kdf_algorithm, kdf_memory_kib, kdf_iterations,
                 kdf_parallelism, kdf_salt, server_auth_salt, server_auth_hash, key_version,
-                encrypted_vault_key, sync_revision, created_at, updated_at
+                encrypted_vault_key, sync_revision, avatar_png, created_at, updated_at
          FROM users
          WHERE id = ?1",
     )

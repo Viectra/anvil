@@ -96,7 +96,7 @@ impl Default for ItemLogo {
     fn default() -> Self {
         Self {
             blob_id: None,
-            fallback_color: "#E07A2F".to_owned(),
+            fallback_color: "#7C6DFA".to_owned(),
         }
     }
 }

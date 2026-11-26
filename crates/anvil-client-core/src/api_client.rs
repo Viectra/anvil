@@ -83,6 +83,20 @@ pub struct PublicUserProfileDto {
     pub kdf_params: KdfParams,
     pub key_version: u32,
     pub sync_revision: i64,
+    #[serde(default)]
+    pub avatar_b64: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct AccountMeResponseDto {
+    pub user_id: Uuid,
+    pub email: String,
+    pub role: String,
+    pub kdf_params: KdfParams,
+    pub key_version: u32,
+    pub sync_revision: i64,
+    #[serde(default)]
+    pub avatar_b64: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -106,6 +120,8 @@ pub struct LoginResponseDto {
     pub key_version: u32,
     pub encrypted_vault_key_b64: String,
     pub sync_revision: i64,
+    #[serde(default)]
+    pub avatar_b64: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -453,6 +469,109 @@ impl AnvilApiClient {
                 .await;
         }
         self.clear_tokens().await;
+        Ok(())
+    }
+
+    pub async fn restore_session_from_refresh(
+        &self,
+        refresh_token: &str,
+    ) -> Result<(String, String), ClientError> {
+        #[derive(Serialize)]
+        struct RefreshBody<'a> {
+            refresh_token: &'a str,
+        }
+        let body = serde_json::to_vec(&RefreshBody { refresh_token })
+            .map_err(|e| ClientError::Serialization(e.to_string()))?;
+        let (status, _, bytes) = self
+            .send_raw(
+                Method::POST,
+                "/api/v1/auth/refresh",
+                None,
+                Some("application/json"),
+                Some(body),
+            )
+            .await?;
+        let refreshed: RefreshResponseDto = decode_ok_or_error(status, &bytes)?;
+        self.set_tokens(
+            refreshed.access_token.clone(),
+            refreshed.refresh_token.clone(),
+        )
+        .await;
+        Ok((refreshed.access_token, refreshed.refresh_token))
+    }
+
+    pub async fn get_me(&self) -> Result<AccountMeResponseDto, ClientError> {
+        let (status, _, bytes) = self
+            .send_authenticated(Method::GET, "/api/v1/account/me", None, None)
+            .await?;
+        decode_ok_or_error(status, &bytes)
+    }
+
+    pub async fn change_email(
+        &self,
+        current_master_auth_hash: &[u8; 32],
+        new_email: &str,
+    ) -> Result<String, ClientError> {
+        #[derive(Serialize)]
+        struct ChangeEmailBody<'a> {
+            current_master_auth_hash_b64: String,
+            new_email: &'a str,
+        }
+        #[derive(Deserialize)]
+        struct ChangeEmailResp {
+            email: String,
+        }
+        let body = serde_json::to_vec(&ChangeEmailBody {
+            current_master_auth_hash_b64: STANDARD.encode(current_master_auth_hash),
+            new_email,
+        })
+        .map_err(|e| ClientError::Serialization(e.to_string()))?;
+        let (status, _, bytes) = self
+            .send_authenticated(
+                Method::PATCH,
+                "/api/v1/account/email",
+                Some("application/json"),
+                Some(body),
+            )
+            .await?;
+        let resp: ChangeEmailResp = decode_ok_or_error(status, &bytes)?;
+        Ok(resp.email)
+    }
+
+    pub async fn upload_avatar(&self, image_bytes: &[u8]) -> Result<Vec<u8>, ClientError> {
+        #[derive(Serialize)]
+        struct UploadAvatarBody {
+            image_b64: String,
+        }
+        #[derive(Deserialize)]
+        struct AvatarResp {
+            avatar_b64: String,
+        }
+        let body = serde_json::to_vec(&UploadAvatarBody {
+            image_b64: STANDARD.encode(image_bytes),
+        })
+        .map_err(|e| ClientError::Serialization(e.to_string()))?;
+        let (status, _, bytes) = self
+            .send_authenticated(
+                Method::PUT,
+                "/api/v1/account/avatar",
+                Some("application/json"),
+                Some(body),
+            )
+            .await?;
+        let resp: AvatarResp = decode_ok_or_error(status, &bytes)?;
+        STANDARD
+            .decode(resp.avatar_b64.trim())
+            .map_err(|_| ClientError::Serialization("invalid server avatar_b64".to_owned()))
+    }
+
+    pub async fn delete_avatar(&self) -> Result<(), ClientError> {
+        let (status, _, bytes) = self
+            .send_authenticated(Method::DELETE, "/api/v1/account/avatar", None, None)
+            .await?;
+        if !status.is_success() {
+            return Err(parse_server_error(status, &bytes));
+        }
         Ok(())
     }
 

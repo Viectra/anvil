@@ -1,5 +1,6 @@
 //! Encrypted-only SQLite offline cache and mutation queue (zero plaintext persisted on disk).
 
+use std::collections::HashSet;
 use std::fmt;
 use std::str::FromStr;
 use std::time::Duration;
@@ -30,6 +31,8 @@ CREATE TABLE IF NOT EXISTS local_account (
     encrypted_vault_key         BLOB NOT NULL,
     last_synced_revision        INTEGER NOT NULL DEFAULT 0,
     biometric_sealed_vault_key  BLOB NULL,
+    avatar_png                  BLOB NULL,
+    encrypted_refresh_token     BLOB NULL,
     updated_at                  TEXT NOT NULL
 );
 
@@ -199,6 +202,8 @@ pub struct CachedAccount {
     pub encrypted_vault_key: Vec<u8>,
     pub last_synced_revision: i64,
     pub biometric_sealed_vault_key: Option<Vec<u8>>,
+    pub avatar_png: Option<Vec<u8>>,
+    pub encrypted_refresh_token: Option<Vec<u8>>,
     pub updated_at: DateTime<Utc>,
 }
 
@@ -307,6 +312,26 @@ impl EncryptedLocalCache {
             .await?;
 
         sqlx::raw_sql(CACHE_SCHEMA_SQL).execute(&pool).await?;
+
+        // Seamlessly migrate existing on-disk SQLite caches lacking avatar_png / encrypted_refresh_token.
+        let cols = sqlx::query("PRAGMA table_info(local_account)")
+            .fetch_all(&pool)
+            .await?;
+        let col_names: HashSet<String> = cols
+            .iter()
+            .filter_map(|r| r.try_get::<String, _>("name").ok())
+            .collect();
+        if !col_names.contains("avatar_png") {
+            sqlx::query("ALTER TABLE local_account ADD COLUMN avatar_png BLOB NULL")
+                .execute(&pool)
+                .await?;
+        }
+        if !col_names.contains("encrypted_refresh_token") {
+            sqlx::query("ALTER TABLE local_account ADD COLUMN encrypted_refresh_token BLOB NULL")
+                .execute(&pool)
+                .await?;
+        }
+
         Ok(Self { pool })
     }
 
@@ -319,8 +344,9 @@ impl EncryptedLocalCache {
             "INSERT INTO local_account (
                 id, user_id, server_url, email, role, kdf_memory_kib, kdf_iterations,
                 kdf_parallelism, kdf_salt, key_version, encrypted_vault_key,
-                last_synced_revision, biometric_sealed_vault_key, updated_at
-             ) VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                last_synced_revision, biometric_sealed_vault_key, avatar_png,
+                encrypted_refresh_token, updated_at
+             ) VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
              ON CONFLICT (id) DO UPDATE SET
                 user_id = excluded.user_id,
                 server_url = excluded.server_url,
@@ -333,10 +359,17 @@ impl EncryptedLocalCache {
                 key_version = excluded.key_version,
                 encrypted_vault_key = excluded.encrypted_vault_key,
                 last_synced_revision = excluded.last_synced_revision,
-                biometric_sealed_vault_key = COALESCE(
-                    excluded.biometric_sealed_vault_key,
-                    local_account.biometric_sealed_vault_key
-                ),
+                biometric_sealed_vault_key = CASE
+                    WHEN local_account.user_id = excluded.user_id
+                    THEN COALESCE(excluded.biometric_sealed_vault_key, local_account.biometric_sealed_vault_key)
+                    ELSE excluded.biometric_sealed_vault_key
+                END,
+                avatar_png = excluded.avatar_png,
+                encrypted_refresh_token = CASE
+                    WHEN local_account.user_id = excluded.user_id
+                    THEN COALESCE(excluded.encrypted_refresh_token, local_account.encrypted_refresh_token)
+                    ELSE excluded.encrypted_refresh_token
+                END,
                 updated_at = excluded.updated_at",
         )
         .bind(fmt_uuid(acct.user_id))
@@ -351,6 +384,8 @@ impl EncryptedLocalCache {
         .bind(&acct.encrypted_vault_key)
         .bind(acct.last_synced_revision)
         .bind(&acct.biometric_sealed_vault_key)
+        .bind(&acct.avatar_png)
+        .bind(&acct.encrypted_refresh_token)
         .bind(fmt_ts(acct.updated_at))
         .execute(&self.pool)
         .await?;
@@ -361,7 +396,8 @@ impl EncryptedLocalCache {
         let row = sqlx::query(
             "SELECT user_id, server_url, email, role, kdf_memory_kib, kdf_iterations,
                     kdf_parallelism, kdf_salt, key_version, encrypted_vault_key,
-                    last_synced_revision, biometric_sealed_vault_key, updated_at
+                    last_synced_revision, biometric_sealed_vault_key, avatar_png,
+                    encrypted_refresh_token, updated_at
              FROM local_account
              WHERE id = 1",
         )
@@ -369,6 +405,64 @@ impl EncryptedLocalCache {
         .await?;
 
         row.as_ref().map(decode_account).transpose()
+    }
+
+    pub async fn set_account_profile(
+        &self,
+        user_id: Uuid,
+        email: &str,
+        role: &str,
+        avatar_png: Option<&[u8]>,
+    ) -> Result<(), ClientError> {
+        sqlx::query(
+            "UPDATE local_account
+             SET email = ?1, role = ?2, avatar_png = ?3, updated_at = ?4
+             WHERE user_id = ?5",
+        )
+        .bind(email)
+        .bind(role)
+        .bind(avatar_png)
+        .bind(fmt_ts(Utc::now()))
+        .bind(fmt_uuid(user_id))
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn set_account_avatar(
+        &self,
+        user_id: Uuid,
+        avatar_png: Option<&[u8]>,
+    ) -> Result<(), ClientError> {
+        sqlx::query(
+            "UPDATE local_account
+             SET avatar_png = ?1, updated_at = ?2
+             WHERE user_id = ?3",
+        )
+        .bind(avatar_png)
+        .bind(fmt_ts(Utc::now()))
+        .bind(fmt_uuid(user_id))
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn set_encrypted_refresh_token(
+        &self,
+        user_id: Uuid,
+        encrypted_refresh_token: Option<&[u8]>,
+    ) -> Result<(), ClientError> {
+        sqlx::query(
+            "UPDATE local_account
+             SET encrypted_refresh_token = ?1, updated_at = ?2
+             WHERE user_id = ?3",
+        )
+        .bind(encrypted_refresh_token)
+        .bind(fmt_ts(Utc::now()))
+        .bind(fmt_uuid(user_id))
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 
     pub async fn set_biometric_seal(
@@ -846,6 +940,8 @@ fn decode_account(row: &SqliteRow) -> Result<CachedAccount, ClientError> {
         encrypted_vault_key: row.try_get("encrypted_vault_key")?,
         last_synced_revision: row.try_get("last_synced_revision")?,
         biometric_sealed_vault_key: row.try_get("biometric_sealed_vault_key")?,
+        avatar_png: row.try_get("avatar_png")?,
+        encrypted_refresh_token: row.try_get("encrypted_refresh_token")?,
         updated_at: get_ts(row, "updated_at")?,
     })
 }

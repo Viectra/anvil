@@ -81,16 +81,30 @@ impl DbPool {
 
     /// Runs embedded schema migrations for the active backend.
     pub async fn migrate(&self) -> Result<(), DbError> {
-        const POSTGRES_MIGRATIONS: EmbeddedMigrations = EmbeddedMigrations(&[(
-            1,
-            "initial",
-            include_str!("../../migrations/postgres/0001_initial.sql"),
-        )]);
-        const SQLITE_MIGRATIONS: EmbeddedMigrations = EmbeddedMigrations(&[(
-            1,
-            "initial",
-            include_str!("../../migrations/sqlite/0001_initial.sql"),
-        )]);
+        const POSTGRES_MIGRATIONS: EmbeddedMigrations = EmbeddedMigrations(&[
+            (
+                1,
+                "initial",
+                include_str!("../../migrations/postgres/0001_initial.sql"),
+            ),
+            (
+                2,
+                "user_avatar",
+                include_str!("../../migrations/postgres/0002_user_avatar.sql"),
+            ),
+        ]);
+        const SQLITE_MIGRATIONS: EmbeddedMigrations = EmbeddedMigrations(&[
+            (
+                1,
+                "initial",
+                include_str!("../../migrations/sqlite/0001_initial.sql"),
+            ),
+            (
+                2,
+                "user_avatar",
+                include_str!("../../migrations/sqlite/0002_user_avatar.sql"),
+            ),
+        ]);
 
         match self {
             Self::Postgres(pool) => {
@@ -231,6 +245,7 @@ pub struct UserRecord {
     pub key_version: u32,
     pub encrypted_vault_key: Vec<u8>,
     pub sync_revision: i64,
+    pub avatar_png: Option<Vec<u8>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -552,6 +567,16 @@ pub enum UpdateUserAdminOutcome {
 }
 
 #[derive(Debug, Clone)]
+pub enum UpdateEmailOutcome {
+    Updated {
+        email: String,
+        updated_at: DateTime<Utc>,
+    },
+    EmailExists,
+    NotFound,
+}
+
+#[derive(Debug, Clone)]
 pub struct AuditLogInput<'a> {
     pub user_id: Option<Uuid>,
     pub event_type: &'a str,
@@ -616,6 +641,22 @@ pub trait VaultRepository: Send + Sync {
     ) -> Result<RotateVaultKeyOutcome, DbError>;
 
     async fn delete_user_account(&self, user_id: Uuid) -> Result<bool, DbError>;
+
+    async fn update_user_email(
+        &self,
+        user_id: Uuid,
+        normalized_email: &str,
+        actor_ip: Option<&str>,
+        session_id: Option<Uuid>,
+    ) -> Result<UpdateEmailOutcome, DbError>;
+
+    async fn update_user_avatar(
+        &self,
+        user_id: Uuid,
+        avatar_png: Option<&[u8]>,
+        actor_ip: Option<&str>,
+        session_id: Option<Uuid>,
+    ) -> Result<bool, DbError>;
 
     async fn pull_vault_sync(
         &self,
@@ -832,6 +873,42 @@ impl VaultRepository for DbPool {
         match self {
             Self::Postgres(pool) => postgres::delete_user_account(pool, user_id).await,
             Self::Sqlite(pool) => sqlite::delete_user_account(pool, user_id).await,
+        }
+    }
+
+    async fn update_user_email(
+        &self,
+        user_id: Uuid,
+        normalized_email: &str,
+        actor_ip: Option<&str>,
+        session_id: Option<Uuid>,
+    ) -> Result<UpdateEmailOutcome, DbError> {
+        match self {
+            Self::Postgres(pool) => {
+                postgres::update_user_email(pool, user_id, normalized_email, actor_ip, session_id)
+                    .await
+            }
+            Self::Sqlite(pool) => {
+                sqlite::update_user_email(pool, user_id, normalized_email, actor_ip, session_id)
+                    .await
+            }
+        }
+    }
+
+    async fn update_user_avatar(
+        &self,
+        user_id: Uuid,
+        avatar_png: Option<&[u8]>,
+        actor_ip: Option<&str>,
+        session_id: Option<Uuid>,
+    ) -> Result<bool, DbError> {
+        match self {
+            Self::Postgres(pool) => {
+                postgres::update_user_avatar(pool, user_id, avatar_png, actor_ip, session_id).await
+            }
+            Self::Sqlite(pool) => {
+                sqlite::update_user_avatar(pool, user_id, avatar_png, actor_ip, session_id).await
+            }
         }
     }
 

@@ -8,7 +8,7 @@ use anvil_core::crypto::{
     derive_master_key, derive_master_subkeys, derive_vault_subkeys, encrypt_envelope,
     generate_kdf_salt, unwrap_vault_key, wrap_vault_key,
 };
-use anvil_core::media::process_custom_logo;
+use anvil_core::media::{process_avatar_image, process_custom_logo};
 use anvil_core::models::{
     EncryptedFolderRecord, EncryptedItemRecord, VaultBlob, VaultFolder, VaultItem, VaultSnapshot,
     decrypt_blob, decrypt_folder, decrypt_item, encrypt_blob, encrypt_folder, encrypt_item,
@@ -142,6 +142,14 @@ impl ClientSyncEngine {
             })
             .await?;
 
+        let subkeys = derive_vault_subkeys(&vault_key)?;
+        let avatar_png = decode_optional_avatar(reg_resp.user.avatar_b64.as_deref());
+        let encrypted_refresh_token = Some(seal_refresh_token(
+            &subkeys,
+            reg_resp.user.user_id,
+            &reg_resp.refresh_token,
+        )?);
+
         let account = CachedAccount {
             user_id: reg_resp.user.user_id,
             server_url: self.api.base_url().to_owned(),
@@ -155,12 +163,13 @@ impl ClientSyncEngine {
             encrypted_vault_key: wrapped_vk,
             last_synced_revision: reg_resp.user.sync_revision,
             biometric_sealed_vault_key: None,
+            avatar_png,
+            encrypted_refresh_token,
             updated_at: Utc::now(),
         };
         self.cache.clear_all().await?;
         self.cache.save_account(&account).await?;
 
-        let subkeys = derive_vault_subkeys(&vault_key)?;
         self.lock.unlock(
             account.user_id,
             account.key_version,
@@ -237,6 +246,13 @@ impl ClientSyncEngine {
             existing.map_or(0, |a| a.last_synced_revision)
         };
 
+        let encrypted_refresh_token = Some(seal_refresh_token(
+            &subkeys,
+            login_resp.user_id,
+            &login_resp.refresh_token,
+        )?);
+        let avatar_png = decode_optional_avatar(login_resp.avatar_b64.as_deref());
+
         let account = CachedAccount {
             user_id: login_resp.user_id,
             server_url: self.api.base_url().to_owned(),
@@ -250,6 +266,8 @@ impl ClientSyncEngine {
             encrypted_vault_key: wrapped_vk,
             last_synced_revision: initial_rev,
             biometric_sealed_vault_key: None,
+            avatar_png,
+            encrypted_refresh_token,
             updated_at: Utc::now(),
         };
         self.cache.save_account(&account).await?;
@@ -269,7 +287,8 @@ impl ClientSyncEngine {
             .ok_or(ClientError::NotConfigured)
     }
 
-    /// Unlocks from the local encrypted cache using the Master Password (works offline).
+    /// Unlocks from the local encrypted cache using the Master Password (works offline),
+    /// then performs best-effort online session restoration and profile/vault sync.
     pub async fn unlock_with_password(&self, master_password: &str) -> Result<(), ClientError> {
         let acct = self
             .cache
@@ -280,7 +299,7 @@ impl ClientSyncEngine {
         let kdf_params = account_kdf_params(&acct)?;
         let pw = MasterPassword::new(master_password);
 
-        let (_, vault_key) = self.lock.verify_master_password_reauth(
+        let (auth_hash, vault_key) = self.lock.verify_master_password_reauth(
             &pw,
             &kdf_params,
             &kdf_salt,
@@ -295,14 +314,63 @@ impl ClientSyncEngine {
             acct.user_id,
             acct.key_version,
             vault_key,
-            subkeys,
+            subkeys.clone(),
             folders,
             items,
         );
+
+        if !self.api.has_session().await {
+            let mut restored = false;
+            if let Some(enc_rt) = acct.encrypted_refresh_token.as_deref()
+                && let Ok(rt) = unseal_refresh_token(&subkeys, acct.user_id, enc_rt)
+                && let Ok((_, new_rt)) = self.api.restore_session_from_refresh(&rt).await
+                && let Ok(new_enc) = seal_refresh_token(&subkeys, acct.user_id, &new_rt)
+            {
+                let _ = self
+                    .cache
+                    .set_encrypted_refresh_token(acct.user_id, Some(&new_enc))
+                    .await;
+                restored = true;
+            }
+            if !restored
+                && let Ok(login_resp) = self
+                    .api
+                    .login(
+                        &acct.email,
+                        &auth_hash,
+                        &self.device_name,
+                        &self.device_platform,
+                    )
+                    .await
+            {
+                if let Ok(new_enc) =
+                    seal_refresh_token(&subkeys, acct.user_id, &login_resp.refresh_token)
+                {
+                    let _ = self
+                        .cache
+                        .set_encrypted_refresh_token(acct.user_id, Some(&new_enc))
+                        .await;
+                }
+                let av = decode_optional_avatar(login_resp.avatar_b64.as_deref());
+                let _ = self
+                    .cache
+                    .set_account_profile(
+                        acct.user_id,
+                        &login_resp.email,
+                        &login_resp.role,
+                        av.as_deref(),
+                    )
+                    .await;
+            }
+        }
+        if self.api.has_session().await {
+            let _ = self.sync_now().await;
+        }
         Ok(())
     }
 
-    /// Unlocks from an already unsealed `VaultKey` (typically retrieved from OS biometric enclave).
+    /// Unlocks from an already unsealed `VaultKey` (typically retrieved via Windows Hello),
+    /// then performs best-effort session refresh and sync.
     pub async fn unlock_with_vault_key(&self, vault_key: VaultKey) -> Result<(), ClientError> {
         let acct = self
             .cache
@@ -315,15 +383,164 @@ impl ClientSyncEngine {
             acct.user_id,
             acct.key_version,
             vault_key,
-            subkeys,
+            subkeys.clone(),
             folders,
             items,
         );
+
+        if !self.api.has_session().await
+            && let Some(enc_rt) = acct.encrypted_refresh_token.as_deref()
+            && let Ok(rt) = unseal_refresh_token(&subkeys, acct.user_id, enc_rt)
+            && let Ok((_, new_rt)) = self.api.restore_session_from_refresh(&rt).await
+            && let Ok(new_enc) = seal_refresh_token(&subkeys, acct.user_id, &new_rt)
+        {
+            let _ = self
+                .cache
+                .set_encrypted_refresh_token(acct.user_id, Some(&new_enc))
+                .await;
+        }
+        if self.api.has_session().await {
+            let _ = self.sync_now().await;
+        }
         Ok(())
     }
 
     pub fn lock_vault(&self) {
         self.lock.lock();
+    }
+
+    /// Logs out cleanly (best-effort server revocation), wipes RAM keys, and clears local account/cache.
+    pub async fn logout_and_clear_local_account(&self) -> Result<(), ClientError> {
+        let _ = self.api.logout().await;
+        self.api.clear_tokens().await;
+        self.lock.lock();
+        self.cache.clear_all().await?;
+        Ok(())
+    }
+
+    /// Re-authenticates current Master Password, updates email on server, and updates local cache.
+    pub async fn change_email(
+        &self,
+        current_password: &str,
+        new_email: &str,
+    ) -> Result<String, ClientError> {
+        let acct = self
+            .cache
+            .load_account()
+            .await?
+            .ok_or(ClientError::NotConfigured)?;
+        let salt = fixed_salt(&acct.kdf_salt)?;
+        let kdf_params = account_kdf_params(&acct)?;
+        let cur_pw = MasterPassword::new(current_password);
+
+        let (cur_auth_hash, _) = self.lock.verify_master_password_reauth(
+            &cur_pw,
+            &kdf_params,
+            &salt,
+            &acct.encrypted_vault_key,
+            acct.user_id,
+            acct.key_version,
+        )?;
+
+        self.ensure_online_session_with_auth(&acct, &cur_auth_hash)
+            .await?;
+
+        let updated_email = self.api.change_email(&cur_auth_hash, new_email).await?;
+        self.cache
+            .set_account_profile(
+                acct.user_id,
+                &updated_email,
+                &acct.role,
+                acct.avatar_png.as_deref(),
+            )
+            .await?;
+        self.persist_current_refresh_token(acct.user_id).await;
+        Ok(updated_email)
+    }
+
+    /// Validates image magic bytes + size, sanitizes/crops to clean PNG, uploads to server, and caches locally.
+    pub async fn upload_avatar(&self, raw_image_bytes: &[u8]) -> Result<Vec<u8>, ClientError> {
+        let processed = process_avatar_image(raw_image_bytes)?;
+        let acct = self
+            .cache
+            .load_account()
+            .await?
+            .ok_or(ClientError::NotConfigured)?;
+        self.ensure_online_session_from_cache(&acct).await?;
+        let saved_png = self.api.upload_avatar(&processed.bytes).await?;
+        self.cache
+            .set_account_avatar(acct.user_id, Some(&saved_png))
+            .await?;
+        self.persist_current_refresh_token(acct.user_id).await;
+        Ok(saved_png)
+    }
+
+    /// Removes the user's profile picture on the server and clears local cached avatar.
+    pub async fn delete_avatar(&self) -> Result<(), ClientError> {
+        let acct = self
+            .cache
+            .load_account()
+            .await?
+            .ok_or(ClientError::NotConfigured)?;
+        self.ensure_online_session_from_cache(&acct).await?;
+        self.api.delete_avatar().await?;
+        self.cache.set_account_avatar(acct.user_id, None).await?;
+        self.persist_current_refresh_token(acct.user_id).await;
+        Ok(())
+    }
+
+    async fn ensure_online_session_from_cache(
+        &self,
+        acct: &CachedAccount,
+    ) -> Result<(), ClientError> {
+        if self.api.has_session().await {
+            return Ok(());
+        }
+        if let Ok((_, _, _, sk)) = self.lock.keys_snapshot()
+            && let Some(enc_rt) = acct.encrypted_refresh_token.as_deref()
+            && let Ok(rt) = unseal_refresh_token(&sk, acct.user_id, enc_rt)
+        {
+            self.api.restore_session_from_refresh(&rt).await?;
+            self.persist_current_refresh_token(acct.user_id).await;
+            return Ok(());
+        }
+        Err(ClientError::NotAuthenticated)
+    }
+
+    async fn ensure_online_session_with_auth(
+        &self,
+        acct: &CachedAccount,
+        auth_hash: &[u8; 32],
+    ) -> Result<(), ClientError> {
+        if self.api.has_session().await {
+            return Ok(());
+        }
+        if self.ensure_online_session_from_cache(acct).await.is_ok() {
+            return Ok(());
+        }
+        self.api
+            .login(
+                &acct.email,
+                auth_hash,
+                &self.device_name,
+                &self.device_platform,
+            )
+            .await?;
+        self.persist_current_refresh_token(acct.user_id).await;
+        Ok(())
+    }
+
+    async fn persist_current_refresh_token(&self, user_id: Uuid) {
+        if let Ok((uid, _, _, sk)) = self.lock.keys_snapshot()
+            && uid == user_id
+            && let Some((_, refresh)) = self.api.current_tokens().await
+            && let Ok(enc) = seal_refresh_token(&sk, user_id, &refresh)
+        {
+            let _ = self
+                .cache
+                .set_encrypted_refresh_token(user_id, Some(&enc))
+                .await;
+        }
     }
 
     pub fn check_inactivity(&self) -> bool {
@@ -788,6 +1005,15 @@ impl ClientSyncEngine {
         if let Some(sk) = subkeys {
             let (folders, items) = self.decrypt_cached_vault(&sk, user_id).await?;
             self.lock.replace_decrypted_data(folders, items);
+            self.persist_current_refresh_token(user_id).await;
+        }
+
+        if let Ok(me) = self.api.get_me().await {
+            let av = decode_optional_avatar(me.avatar_b64.as_deref());
+            let _ = self
+                .cache
+                .set_account_profile(user_id, &me.email, &me.role, av.as_deref())
+                .await;
         }
 
         let pending_conflicts = self.cache.list_conflicts(user_id).await?.len();
@@ -1628,4 +1854,41 @@ pub fn unseal_bytes_with_aad(
 /// Helper to construct canonical AAD for a cached blob record.
 pub fn blob_aad(user_id: Uuid, item_id: Uuid, blob_id: Uuid) -> Vec<u8> {
     aad_blob(user_id, item_id, blob_id)
+}
+
+fn refresh_token_aad(user_id: Uuid) -> Vec<u8> {
+    format!("anvil:v1:local-refresh|{}", user_id.hyphenated()).into_bytes()
+}
+
+fn seal_refresh_token(
+    subkeys: &VaultSubKeys,
+    user_id: Uuid,
+    refresh_token: &str,
+) -> Result<Vec<u8>, ClientError> {
+    Ok(encrypt_envelope(
+        &subkeys.item_key,
+        refresh_token.as_bytes(),
+        &refresh_token_aad(user_id),
+    )?)
+}
+
+fn unseal_refresh_token(
+    subkeys: &VaultSubKeys,
+    user_id: Uuid,
+    encrypted: &[u8],
+) -> Result<Zeroizing<String>, ClientError> {
+    let raw = decrypt_envelope(&subkeys.item_key, encrypted, &refresh_token_aad(user_id))?;
+    String::from_utf8(raw.to_vec())
+        .map(Zeroizing::new)
+        .map_err(|_| {
+            ClientError::CacheIntegrity("invalid UTF-8 in cached refresh token".to_owned())
+        })
+}
+
+fn decode_optional_avatar(raw_b64: Option<&str>) -> Option<Vec<u8>> {
+    raw_b64
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .and_then(|s| STANDARD.decode(s).ok())
+        .filter(|bytes| bytes.starts_with(b"\x89PNG\r\n\x1a\n"))
 }

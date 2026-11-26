@@ -14,7 +14,7 @@ default = ["favicon-proxy"]
 favicon-proxy = ["dep:reqwest"]
 
 [dependencies]
-anvil-core = { path = "../anvil-core", default-features = false }
+anvil-core = { path = "../anvil-core", default-features = false, features = ["media"] }
 anyhow.workspace = true
 argon2.workspace = true
 async-trait.workspace = true
@@ -46,4 +46,5 @@ zeroize.workspace = true
 
 [dev-dependencies]
 http-body-util.workspace = true
+image.workspace = true
 tempfile.workspace = true

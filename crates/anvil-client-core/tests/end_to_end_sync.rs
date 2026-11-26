@@ -536,3 +536,94 @@ async fn emergency_vault_key_rotation_invalidates_compromised_key_and_syncs_clea
 
     Ok(())
 }
+
+#[tokio::test]
+async fn account_profile_email_avatar_refresh_and_logout_lifecycle() -> AppResult<()> {
+    let srv = spawn_test_server().await?;
+    let dir = TempDir::new()?;
+    let db_path = dir.path().join("legacy_v1_cache.db");
+    let db_url = format!("sqlite:{}", db_path.to_string_lossy().replace('\\', "/"));
+
+    // Simulate an existing v1 vault_cache.db missing avatar_png and encrypted_refresh_token columns.
+    {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .connect(&format!("{db_url}?mode=rwc"))
+            .await?;
+        sqlx::raw_sql(
+            "CREATE TABLE local_account (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                user_id TEXT NOT NULL UNIQUE,
+                server_url TEXT NOT NULL,
+                email TEXT NOT NULL,
+                role TEXT NOT NULL,
+                kdf_memory_kib INTEGER NOT NULL,
+                kdf_iterations INTEGER NOT NULL,
+                kdf_parallelism INTEGER NOT NULL,
+                kdf_salt BLOB NOT NULL,
+                key_version INTEGER NOT NULL,
+                encrypted_vault_key BLOB NOT NULL,
+                last_synced_revision INTEGER NOT NULL DEFAULT 0,
+                biometric_sealed_vault_key BLOB NULL,
+                updated_at TEXT NOT NULL
+            );",
+        )
+        .execute(&pool)
+        .await?;
+        pool.close().await;
+    }
+
+    let cache = EncryptedLocalCache::connect(&db_url).await?;
+    let engine = ClientSyncEngine::new(
+        AnvilApiClient::new(&srv.base_url)?,
+        cache.clone(),
+        VaultLockManager::default(),
+        "Desktop-Test",
+        "windows",
+    );
+
+    engine
+        .register_and_unlock(
+            "profile@example.com",
+            "Profile#Pass2026!",
+            None,
+            fast_client_kdf(),
+        )
+        .await?;
+
+    let png_bytes = STANDARD.decode(SAMPLE_PNG_B64)?;
+    assert!(engine.upload_avatar(b"<svg></svg>").await.is_err());
+    let uploaded_png = engine.upload_avatar(&png_bytes).await?;
+    assert!(uploaded_png.starts_with(b"\x89PNG\r\n\x1a\n"));
+
+    let updated_email = engine
+        .change_email("Profile#Pass2026!", "Renamed@Example.com")
+        .await?;
+    assert_eq!(updated_email, "renamed@example.com");
+
+    // Lock, drop RAM bearer tokens, and verify unlock_with_password restores session & profile cleanly.
+    engine.lock_vault();
+    engine.api.clear_tokens().await;
+    engine.unlock_with_password("Profile#Pass2026!").await?;
+    assert!(engine.api.has_session().await);
+
+    let cached_after = cache.load_account().await?.ok_or("missing cached acct")?;
+    assert_eq!(cached_after.email, "renamed@example.com");
+    assert!(cached_after.avatar_png.is_some());
+
+    engine.delete_avatar().await?;
+    assert!(
+        cache
+            .load_account()
+            .await?
+            .ok_or("missing acct")?
+            .avatar_png
+            .is_none()
+    );
+
+    engine.logout_and_clear_local_account().await?;
+    assert!(!engine.lock.is_unlocked());
+    assert!(!engine.api.has_session().await);
+    assert!(cache.load_account().await?.is_none());
+
+    Ok(())
+}

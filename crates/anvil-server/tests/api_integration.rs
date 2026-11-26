@@ -1535,3 +1535,134 @@ async fn optional_postgres_integration_suite() -> AppResult<()> {
     assert_eq!(me["user_id"], alice.user_id.hyphenated().to_string());
     Ok(())
 }
+
+#[tokio::test]
+async fn account_email_change_and_avatar_security_validation() -> AppResult<()> {
+    let app = setup_sqlite_memory(true).await?;
+    let alice =
+        register_zk_account(&app.router, "alice@example.com", "alice-pw-9999", None).await?;
+    let _bob = register_zk_account(&app.router, "bob@example.com", "bob-pw-9999", None).await?;
+
+    // Wrong password rejected for email change.
+    let (bad_pw_st, _, _) = send_json(
+        &app.router,
+        Method::PATCH,
+        "/api/v1/account/email",
+        Some(&alice.access_token),
+        Some(json!({
+            "current_master_auth_hash_b64": STANDARD.encode([0u8; 32]),
+            "new_email": "alice-new@example.com"
+        })),
+    )
+    .await?;
+    assert_eq!(bad_pw_st, StatusCode::UNAUTHORIZED);
+
+    // Duplicate email rejected with 409 Conflict.
+    let (dup_st, _, dup_body) = send_json(
+        &app.router,
+        Method::PATCH,
+        "/api/v1/account/email",
+        Some(&alice.access_token),
+        Some(json!({
+            "current_master_auth_hash_b64": STANDARD.encode(alice.master_auth_hash),
+            "new_email": "BOB@example.com"
+        })),
+    )
+    .await?;
+    assert_eq!(dup_st, StatusCode::CONFLICT);
+    assert_eq!(dup_body["error"]["code"], "EMAIL_ALREADY_REGISTERED");
+
+    // Valid email change updates /account/me and allows login with the new email + same MasterPassword.
+    let (ok_email_st, _, ok_email_body) = send_json(
+        &app.router,
+        Method::PATCH,
+        "/api/v1/account/email",
+        Some(&alice.access_token),
+        Some(json!({
+            "current_master_auth_hash_b64": STANDARD.encode(alice.master_auth_hash),
+            "new_email": "Alice.Updated@Example.com"
+        })),
+    )
+    .await?;
+    assert_eq!(ok_email_st, StatusCode::OK);
+    assert_eq!(ok_email_body["email"], "alice.updated@example.com");
+
+    let (_, _, logged_vk, _) = login_zk_account(
+        &app.router,
+        "alice.updated@example.com",
+        "alice-pw-9999",
+        "Workstation",
+    )
+    .await?;
+    assert_eq!(logged_vk, alice.vault_key);
+
+    // Malicious SVG/HTML rejected on avatar upload.
+    let (svg_st, _, svg_body) = send_json(
+        &app.router,
+        Method::PUT,
+        "/api/v1/account/avatar",
+        Some(&alice.access_token),
+        Some(json!({
+            "image_b64": STANDARD.encode(b"<svg onload=\"alert(1)\"><script>1</script></svg>")
+        })),
+    )
+    .await?;
+    assert_eq!(svg_st, StatusCode::BAD_REQUEST);
+    assert_eq!(svg_body["error"]["code"], "INVALID_IMAGE");
+
+    // Valid PNG image accepted, resized/sanitized, and exposed on /account/me.
+    let raw_img = {
+        let img = image::RgbaImage::from_fn(32, 24, |x, y| {
+            image::Rgba([(x * 5) as u8, (y * 8) as u8, 250, 255])
+        });
+        let mut buf = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(img).write_to(&mut buf, image::ImageFormat::Png)?;
+        buf.into_inner()
+    };
+    let (put_av_st, _, put_av_body) = send_json(
+        &app.router,
+        Method::PUT,
+        "/api/v1/account/avatar",
+        Some(&alice.access_token),
+        Some(json!({ "image_b64": STANDARD.encode(&raw_img) })),
+    )
+    .await?;
+    assert_eq!(put_av_st, StatusCode::OK);
+    let returned_b64 = put_av_body["avatar_b64"].as_str().ok_or("avatar_b64")?;
+    let returned_png = STANDARD.decode(returned_b64)?;
+    assert!(returned_png.starts_with(b"\x89PNG\r\n\x1a\n"));
+
+    let (me_av_st, _, me_av_body) = send_json(
+        &app.router,
+        Method::GET,
+        "/api/v1/account/me",
+        Some(&alice.access_token),
+        None,
+    )
+    .await?;
+    assert_eq!(me_av_st, StatusCode::OK);
+    assert_eq!(me_av_body["avatar_b64"], returned_b64);
+
+    // Deleting avatar clears it from /account/me.
+    let (del_av_st, _, _) = send_json(
+        &app.router,
+        Method::DELETE,
+        "/api/v1/account/avatar",
+        Some(&alice.access_token),
+        None,
+    )
+    .await?;
+    assert_eq!(del_av_st, StatusCode::NO_CONTENT);
+
+    let (me_cleared_st, _, me_cleared_body) = send_json(
+        &app.router,
+        Method::GET,
+        "/api/v1/account/me",
+        Some(&alice.access_token),
+        None,
+    )
+    .await?;
+    assert_eq!(me_cleared_st, StatusCode::OK);
+    assert!(me_cleared_body["avatar_b64"].is_null());
+    Ok(())
+}

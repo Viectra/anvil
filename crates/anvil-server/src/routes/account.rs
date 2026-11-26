@@ -13,10 +13,11 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::auth::middleware::AuthUser;
+use crate::auth::password::normalize_email;
 use crate::db::{
     AuditLogInput, BlobReencryptUpsert, DevicePlatform, FolderUpsertInput, ItemUpsertInput,
     RotatePasswordInput, RotatePasswordOutcome, RotateVaultKeyInput, RotateVaultKeyOutcome,
-    UserRole, VaultRepository,
+    UpdateEmailOutcome, UserRole, VaultRepository,
 };
 use crate::error::{ApiError, ApiJson};
 use crate::routes::auth::{decode_b64_envelope, decode_b64_fixed, user_to_kdf_params};
@@ -25,6 +26,7 @@ use crate::state::AppState;
 
 const MAX_WRAPPED_VAULT_KEY_BYTES: usize = 512;
 const MAX_REENCRYPT_ENVELOPE_BYTES: usize = 1_048_576;
+const MAX_AVATAR_UPLOAD_B64_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Serialize)]
 pub struct AccountMeResponse {
@@ -34,8 +36,31 @@ pub struct AccountMeResponse {
     pub kdf_params: KdfParams,
     pub key_version: u32,
     pub sync_revision: i64,
+    pub avatar_b64: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ChangeEmailRequest {
+    pub current_master_auth_hash_b64: String,
+    pub new_email: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ChangeEmailResponse {
+    pub email: String,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UploadAvatarRequest {
+    pub image_b64: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AvatarResponse {
+    pub avatar_b64: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -124,9 +149,155 @@ pub async fn get_me(
         kdf_params: user_to_kdf_params(&user),
         key_version: user.key_version,
         sync_revision: user.sync_revision,
+        avatar_b64: user.avatar_png.as_deref().map(|b| STANDARD.encode(b)),
         created_at: user.created_at,
         updated_at: user.updated_at,
     }))
+}
+
+/// Verifies current `MasterAuthHash` and updates the authenticated user's login email.
+pub async fn change_email(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    ApiJson(req): ApiJson<ChangeEmailRequest>,
+) -> Result<Json<ChangeEmailResponse>, ApiError> {
+    let normalized = normalize_email(&req.new_email)?;
+    let current_hash = decode_b64_fixed::<KEY_LEN>(
+        "current_master_auth_hash_b64",
+        &req.current_master_auth_hash_b64,
+    )?;
+
+    let user = state
+        .db
+        .find_user_by_id(auth.user_id)
+        .await?
+        .ok_or_else(|| ApiError::not_found("ACCOUNT_NOT_FOUND", "Account no longer exists"))?;
+
+    let hasher = state.hasher.clone();
+    let salt = user.server_auth_salt.clone();
+    let encoded = user.server_auth_hash.clone();
+    let valid = tokio::task::spawn_blocking(move || {
+        hasher.verify_master_auth_hash(&current_hash, &salt, &encoded)
+    })
+    .await
+    .map_err(|e| ApiError::internal(anyhow::anyhow!("password verification join error: {e}")))??;
+
+    let actor_ip = auth.client_ip.map(|ip| ip.to_string());
+    if !valid {
+        let _ = state
+            .db
+            .insert_audit_log(AuditLogInput {
+                user_id: Some(auth.user_id),
+                event_type: "email_change_failed",
+                actor_ip: actor_ip.as_deref(),
+                session_id: Some(auth.session_id),
+                metadata_json: Some(r#"{"reason":"bad_password"}"#.to_owned()),
+            })
+            .await;
+        return Err(ApiError::unauthorized(
+            "INVALID_CREDENTIALS",
+            "Current master password verification failed",
+        ));
+    }
+
+    if normalized == user.email {
+        return Ok(Json(ChangeEmailResponse {
+            email: user.email,
+            updated_at: user.updated_at,
+        }));
+    }
+
+    match state
+        .db
+        .update_user_email(
+            auth.user_id,
+            &normalized,
+            actor_ip.as_deref(),
+            Some(auth.session_id),
+        )
+        .await?
+    {
+        UpdateEmailOutcome::Updated { email, updated_at } => {
+            Ok(Json(ChangeEmailResponse { email, updated_at }))
+        }
+        UpdateEmailOutcome::EmailExists => Err(ApiError::conflict(
+            "EMAIL_ALREADY_REGISTERED",
+            "An account with this email already exists",
+        )),
+        UpdateEmailOutcome::NotFound => Err(ApiError::not_found(
+            "ACCOUNT_NOT_FOUND",
+            "Account no longer exists",
+        )),
+    }
+}
+
+/// Validates image magic bytes (PNG/JPEG/WebP), strips EXIF metadata, resizes <= 256x256, and stores PNG avatar.
+pub async fn upload_avatar(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    ApiJson(req): ApiJson<UploadAvatarRequest>,
+) -> Result<Json<AvatarResponse>, ApiError> {
+    let trimmed = req.image_b64.trim();
+    if trimmed.is_empty() || trimmed.len() > MAX_AVATAR_UPLOAD_B64_BYTES {
+        return Err(ApiError::bad_request(
+            "INVALID_IMAGE",
+            "Avatar image payload is empty or exceeds maximum upload size",
+        ));
+    }
+    let raw_bytes = STANDARD
+        .decode(trimmed)
+        .map_err(|_| ApiError::bad_request("INVALID_BASE64", "Invalid image_b64 payload"))?;
+
+    let processed =
+        tokio::task::spawn_blocking(move || anvil_core::media::process_avatar_image(&raw_bytes))
+            .await
+            .map_err(|e| ApiError::internal(anyhow::anyhow!("image processing join error: {e}")))?
+            .map_err(|e| ApiError::bad_request("INVALID_IMAGE", e.to_string()))?;
+
+    let actor_ip = auth.client_ip.map(|ip| ip.to_string());
+    let saved = state
+        .db
+        .update_user_avatar(
+            auth.user_id,
+            Some(&processed.bytes),
+            actor_ip.as_deref(),
+            Some(auth.session_id),
+        )
+        .await?;
+    if !saved {
+        return Err(ApiError::not_found(
+            "ACCOUNT_NOT_FOUND",
+            "Account no longer exists",
+        ));
+    }
+
+    Ok(Json(AvatarResponse {
+        avatar_b64: STANDARD.encode(&processed.bytes),
+    }))
+}
+
+/// Removes the authenticated user's profile picture.
+pub async fn delete_avatar(
+    State(state): State<AppState>,
+    auth: AuthUser,
+) -> Result<StatusCode, ApiError> {
+    let actor_ip = auth.client_ip.map(|ip| ip.to_string());
+    let updated = state
+        .db
+        .update_user_avatar(
+            auth.user_id,
+            None,
+            actor_ip.as_deref(),
+            Some(auth.session_id),
+        )
+        .await?;
+    if !updated {
+        return Err(ApiError::not_found(
+            "ACCOUNT_NOT_FOUND",
+            "Account no longer exists",
+        ));
+    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Verifies the current `MasterAuthHash` and atomically updates auth hash, KDF salt/params, and re-wrapped `VaultKey`.

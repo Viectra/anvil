@@ -118,8 +118,16 @@ pub fn build_router(state: AppState) -> Router {
         rl,
         1800,
         2,
-        trusted_proxies,
+        trusted_proxies.clone(),
         Some(vec![Method::DELETE])
+    );
+    let change_email_route = with_rate_limit!(
+        patch(account::change_email),
+        rl,
+        60,
+        5,
+        trusted_proxies,
+        Option::<Vec<Method>>::None
     );
 
     let cors = build_cors_layer(&state.config.cors_origins);
@@ -134,6 +142,13 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/auth/refresh", refresh_route)
         .route("/api/v1/auth/logout", post(auth::logout))
         .route("/api/v1/account/me", account_me_router)
+        .route("/api/v1/account/email", change_email_route)
+        .route(
+            "/api/v1/account/avatar",
+            put(account::upload_avatar)
+                .delete(account::delete_avatar)
+                .layer(DefaultBodyLimit::max(10 * 1024 * 1024)),
+        )
         .route("/api/v1/account/rotate-password", rotate_password_route)
         .route("/api/v1/account/rotate-vault-key", rotate_vault_key_route)
         .route("/api/v1/account/sessions", get(account::list_sessions))

@@ -63,6 +63,7 @@ pub struct PublicUserProfile {
     pub kdf_params: KdfParams,
     pub key_version: u32,
     pub sync_revision: i64,
+    pub avatar_b64: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -94,6 +95,7 @@ pub struct LoginResponse {
     pub key_version: u32,
     pub encrypted_vault_key_b64: String,
     pub sync_revision: i64,
+    pub avatar_b64: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -339,6 +341,7 @@ pub async fn register(
                 kdf_params: user_to_kdf_params(&user),
                 key_version: user.key_version,
                 sync_revision: user.sync_revision,
+                avatar_b64: user.avatar_png.as_deref().map(|b| STANDARD.encode(b)),
             },
         }),
     ))
@@ -469,6 +472,7 @@ pub async fn login(
         key_version: user.key_version,
         encrypted_vault_key_b64: STANDARD.encode(&user.encrypted_vault_key),
         sync_revision: user.sync_revision,
+        avatar_b64: user.avatar_png.as_deref().map(|b| STANDARD.encode(b)),
     }))
 }
 
